@@ -5,6 +5,7 @@ use tokio::{io::AsyncWriteExt as _, sync::RwLock};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 mod http_listener;
+mod message;
 mod unix_listener;
 mod world;
 

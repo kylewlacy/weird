@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use tokio::{io::AsyncBufReadExt as _, sync::RwLock};
 
-use crate::world::World;
+use crate::{
+    message::Message,
+    world::{InsertNode, InsertNodeOffset, Node, ROOT_NODE_ID, World},
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -40,7 +43,32 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
             }
         };
 
-        tracing::info!("received unix client message: {line}");
+        let message = facet_styx::from_str::<Message>(&line);
+        let message = match message {
+            Ok(message) => message,
+            Err(error) => {
+                tracing::warn!("invalid message from Unix client: {error}");
+                break;
+            }
+        };
+
+        tracing::info!("got unix client message: {message:?}");
+
+        match message {
+            Message::Show { show } => {
+                let mut world = state.world.write().await;
+                let node = world.create_node(Node::Text(show.text));
+                let _ = world
+                    .insert_node(InsertNode {
+                        parent: ROOT_NODE_ID,
+                        child: node,
+                        offset: InsertNodeOffset::END,
+                    })
+                    .inspect_err(|error| {
+                        tracing::warn!("failed to insert node in show message: {error:?}");
+                    });
+            }
+        }
     }
 
     Ok(())

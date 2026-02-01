@@ -161,6 +161,7 @@ impl InsertNodeOffset {
     pub const END: Self = InsertNodeOffset::FromEnd(0);
 }
 
+#[derive(Debug)]
 pub enum InsertNodeFailed {
     NodeNotFound,
     ParentNotFound,
