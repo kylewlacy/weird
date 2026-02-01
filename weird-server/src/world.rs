@@ -86,6 +86,7 @@ impl World {
         Ok(insert_index)
     }
 
+    #[expect(unused)]
     pub fn remove_node(&mut self, node_id: NodeId) -> Result<NodeId, RemoveNodeFailed> {
         let node = self
             .nodes
@@ -129,12 +130,14 @@ pub struct NodeId(u64);
 pub const ROOT_NODE_ID: NodeId = NodeId(0);
 
 pub enum Node {
-    Text(String),
+    Text(#[expect(unused)] String),
     Element(Element),
 }
 
 pub struct Element {
+    #[expect(unused)]
     class: String,
+    #[expect(unused)]
     attributes: HashMap<String, String>,
     children: Vec<NodeId>,
 }
@@ -157,6 +160,7 @@ pub enum InsertNodeOffset {
 }
 
 impl InsertNodeOffset {
+    #[expect(unused)]
     pub const BEGINNING: Self = InsertNodeOffset::FromStart(0);
     pub const END: Self = InsertNodeOffset::FromEnd(0);
 }
@@ -166,7 +170,9 @@ pub enum InsertNodeFailed {
     NodeNotFound,
     ParentNotFound,
     OffsetOutOfBounds {
+        #[expect(unused)]
         offset: InsertNodeOffset,
+        #[expect(unused)]
         num_children: usize,
     },
     InvalidParentNodeType,

@@ -10,6 +10,7 @@ use crate::world::World;
 
 #[derive(Clone)]
 pub struct AppState {
+    #[expect(unused)]
     pub world: Arc<RwLock<World>>,
 }
 
