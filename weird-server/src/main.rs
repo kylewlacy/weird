@@ -48,12 +48,12 @@ async fn ws_endpoint_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
 }
 
 async fn ws_handler(mut socket: WebSocket) {
-    tracing::info!("client connected");
+    tracing::info!("web client connected");
 
     while let Some(message) = socket.recv().await {
         let message = match message {
             Err(error) => {
-                tracing::warn!("received client error: {error}");
+                tracing::warn!("received web client error: {error}");
                 break;
             }
             Ok(Message::Close(close_frame)) => {
@@ -61,10 +61,10 @@ async fn ws_handler(mut socket: WebSocket) {
                     tracing::info!(
                         code = close.code,
                         reason = close.reason.as_str(),
-                        "client closed connection"
+                        "web client closed connection"
                     );
                 } else {
-                    tracing::info!("client closed connection (no close frame)");
+                    tracing::info!("web client closed connection (no close frame)");
                 }
                 break;
             }
@@ -78,7 +78,7 @@ async fn ws_handler(mut socket: WebSocket) {
         match result {
             Ok(()) => {}
             Err(error) => {
-                tracing::warn!("failed to send client message: {error}");
+                tracing::warn!("failed to send web client message: {error}");
                 break;
             }
         }
@@ -93,7 +93,7 @@ async fn serve_unix_socket(socket: tokio::net::UnixListener) -> anyhow::Result<(
 }
 
 async fn handle_unix_conn(mut conn: tokio::net::UnixStream) -> anyhow::Result<()> {
-    tracing::info!("client connected");
+    tracing::info!("unix client connected");
 
     let (rx, _tx) = conn.split();
 
@@ -104,7 +104,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream) -> anyhow::Result<()
         let line = match line {
             Ok(Some(line)) => line,
             Ok(None) => {
-                tracing::info!("client disconnected");
+                tracing::info!("unix client disconnected");
                 break;
             }
             Err(error) => {
