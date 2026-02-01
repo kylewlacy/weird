@@ -1,10 +1,22 @@
+use std::sync::Arc;
+
 use axum::{
     extract::{WebSocketUpgrade, ws},
     response::IntoResponse,
 };
+use tokio::sync::RwLock;
 
-pub fn router() -> axum::Router {
-    let router = axum::Router::new().route("/ws", axum::routing::any(ws_endpoint_handler));
+use crate::world::World;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub world: Arc<RwLock<World>>,
+}
+
+pub fn router(state: AppState) -> axum::Router {
+    let router = axum::Router::new()
+        .route("/ws", axum::routing::any(ws_endpoint_handler))
+        .with_state(state);
 
     router
 }
