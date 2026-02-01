@@ -68,6 +68,10 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                         tracing::warn!("failed to insert node in show message: {error:?}");
                     });
             }
+            Message::SyncWorld { .. } => {
+                tracing::warn!("message not supported for Unix connections");
+                continue;
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
 pub struct World {
     nodes: BTreeMap<NodeId, WorldNode>,
@@ -122,24 +122,80 @@ impl World {
 
         Ok(parent_node_id)
     }
+
+    pub fn initial_sync(&self) -> Vec<SyncChange<'_>> {
+        let mut queue = VecDeque::from_iter([ROOT_NODE_ID]);
+        let mut changes = vec![];
+
+        while let Some(id) = queue.pop_front() {
+            let node = &self.nodes[&id];
+
+            match &node.node {
+                Node::Text(_) => {}
+                Node::Element(element) => {
+                    queue.extend(element.children.iter().copied());
+                }
+            }
+
+            changes.push(SyncChange::DidInsert {
+                id,
+                parent: node.parent,
+                node: FlatNode::from(&node.node),
+            });
+        }
+
+        changes
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, facet::Facet)]
+#[facet(transparent)]
 pub struct NodeId(u64);
 
 pub const ROOT_NODE_ID: NodeId = NodeId(0);
 
 pub enum Node {
-    Text(#[expect(unused)] String),
+    Text(String),
     Element(Element),
 }
 
 pub struct Element {
-    #[expect(unused)]
     class: String,
-    #[expect(unused)]
     attributes: HashMap<String, String>,
     children: Vec<NodeId>,
+}
+
+#[derive(Debug, facet::Facet)]
+#[repr(u8)]
+pub enum FlatNode<'a> {
+    Text(#[expect(unused)] &'a str),
+    Element(#[expect(unused)] FlatElement<'a>),
+}
+
+impl<'a> From<&'a Node> for FlatNode<'a> {
+    fn from(node: &'a Node) -> Self {
+        match node {
+            Node::Text(text) => Self::Text(text),
+            Node::Element(element) => Self::Element(element.into()),
+        }
+    }
+}
+
+#[derive(Debug, facet::Facet)]
+pub struct FlatElement<'a> {
+    class: &'a str,
+    attributes: &'a HashMap<String, String>,
+}
+
+impl<'a> From<&'a Element> for FlatElement<'a> {
+    fn from(element: &'a Element) -> Self {
+        let Element {
+            class,
+            attributes,
+            children: _,
+        } = element;
+        Self { class, attributes }
+    }
 }
 
 struct WorldNode {
@@ -181,4 +237,15 @@ pub enum InsertNodeFailed {
 pub enum RemoveNodeFailed {
     NodeNotFound,
     NoParentNode,
+}
+
+#[derive(facet::Facet)]
+#[repr(u8)]
+pub enum SyncChange<'a> {
+    #[expect(unused)]
+    DidInsert {
+        id: NodeId,
+        parent: Option<NodeId>,
+        node: FlatNode<'a>,
+    },
 }

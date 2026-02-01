@@ -8,7 +8,7 @@ const socket = new WebSocket("http://localhost:2552/ws");
 
 socket.addEventListener("open", (_event) => {
   console.log("[WebSocket] opened");
-  socket.send("Hello world!");
+  socket.send(`syncWorld {requestId "syncWorld"}`);
 });
 
 socket.addEventListener("message", (event) => {
