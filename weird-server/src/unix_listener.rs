@@ -4,7 +4,7 @@ use tokio::{io::AsyncBufReadExt as _, sync::RwLock};
 
 use crate::{
     message::Message,
-    world::{InsertNode, InsertNodeOffset, Node, ROOT_NODE_ID, World},
+    world::{InsertNode, InsertNodeOffset, ROOT_NODE_ID, World},
 };
 
 #[derive(Clone)]
@@ -57,7 +57,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
         match message {
             Message::Show { show } => {
                 let mut world = state.world.write().await;
-                let node = world.create_node(Node::Text(show.text));
+                let node = world.create_node(show);
                 let _ = world
                     .insert_node(InsertNode {
                         parent: ROOT_NODE_ID,

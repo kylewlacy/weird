@@ -1,20 +1,14 @@
-use crate::world::SyncChange;
+use crate::world::{NodeTree, SyncChange};
 
 #[derive(Debug, facet::Facet)]
 #[repr(u8)]
 #[facet(untagged)]
 pub enum Message {
     #[facet(rename_all = "camelCase")]
-    Show { show: ShowMessage },
+    SyncWorld { sync_world: SyncWorldRequest },
 
     #[facet(rename_all = "camelCase")]
-    SyncWorld { sync_world: SyncWorldRequest },
-}
-
-#[derive(Debug, facet::Facet)]
-#[facet(rename_all = "PascalCase")]
-pub struct ShowMessage {
-    pub text: String,
+    Show { show: NodeTree },
 }
 
 #[derive(Debug, facet::Facet)]
