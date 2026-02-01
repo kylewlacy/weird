@@ -8,7 +8,7 @@ use axum::{
     },
     response::IntoResponse,
 };
-use tokio::io::AsyncBufReadExt as _;
+use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 #[tokio::main]
@@ -32,8 +32,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").context("$XDG_RUNTIME_DIR not set")?;
-    let unix_socket = tokio::net::UnixListener::bind(Path::new(&runtime_dir).join("weird.sock"))
-        .context("failed to bind weird.sock")?;
+    let unix_socket_path = Path::new(&runtime_dir).join("weird.sock");
+    try_clean_up_old_socket(&unix_socket_path).await?;
+    let unix_socket =
+        tokio::net::UnixListener::bind(unix_socket_path).context("failed to bind weird.sock")?;
     let unix_socket_fut = serve_unix_socket(unix_socket);
 
     tokio::try_join!(http_server_fut, unix_socket_fut)?;
@@ -115,4 +117,63 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream) -> anyhow::Result<()
     }
 
     Ok(())
+}
+
+/// Try to clean up a Unix socket that we want to bind to.
+///
+/// We'll check if the socket path already exists by connecting to it. If it
+/// does exist and we can connect to it successfully, that means another
+/// instance of the server is probably still running. If the socket exists
+/// but we can't connect to it, that probably means a previous instance of
+/// the server exited, so we try to remove the socket so we can bind a new one.
+async fn try_clean_up_old_socket(path: &Path) -> anyhow::Result<()> {
+    let result = tokio::net::UnixStream::connect(path).await;
+
+    match result {
+        Ok(mut conn) => {
+            // Connected to socket, this means there's probably a server
+            // already listening!
+
+            let _ = conn.shutdown().await.inspect_err(|error| {
+                tracing::warn!("failed to disconnect from old socket: {error}")
+            });
+
+            anyhow::bail!(
+                "socket path {} is currently listening, is the server already running?",
+                path.display()
+            );
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // Not found-- socket (probably) doesn't exist, so we can go ahead
+            // and try to create it
+
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {
+            // Connection refused-- meaning the socket exists but is probably
+            // from a dead server. We'll try to remove it first before binding
+            // a fresh socket
+
+            let result = tokio::fs::remove_file(path).await;
+            match result {
+                Ok(()) => {
+                    tracing::debug!("cleaned up old dead socket");
+                }
+                Err(error) => {
+                    tracing::warn!("failed to remove old dead socket: {error}");
+                }
+            }
+
+            Ok(())
+        }
+        Err(error) => {
+            // Another error. This has a good chance of failing, but we'll let
+            // it fail when trying to bind the socket
+
+            tracing::warn!(
+                "encountered unexpected error when checking if server socket already exists: {error}"
+            );
+            Ok(())
+        }
+    }
 }
