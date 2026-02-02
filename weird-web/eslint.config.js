@@ -23,6 +23,12 @@ export default defineConfig([
           caughtErrorsIgnorePattern: "^_",
         },
       ],
+      "no-console": [
+        "warn",
+        {
+          allow: ["debug", "info", "warn", "error"],
+        },
+      ],
     },
   },
 ]);
