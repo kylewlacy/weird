@@ -10,7 +10,7 @@ export class World {
       class: "World",
       attributes: {},
       children: [],
-      dom: document.createElement("div"),
+      dom: createDomElement("World"),
       parent: undefined,
     },
   };
@@ -30,22 +30,24 @@ export class World {
         case "DidInsert": {
           const id = change.$value.id;
           const parent = change.$value.parent ?? undefined;
-          const worldNode: WorldNode =
-            typeof change.$value.node === "string"
-              ? {
-                  type: "text",
-                  parent: change.$value.parent ?? undefined,
-                  text: change.$value.node,
-                  dom: document.createTextNode(change.$value.node),
-                }
-              : {
-                  type: "element",
-                  parent: change.$value.parent ?? undefined,
-                  class: change.$value.node.$tag,
-                  attributes: change.$value.node.$value,
-                  children: [],
-                  dom: document.createElement("div"),
-                };
+          let worldNode: WorldNode;
+          if (typeof change.$value.node === "string") {
+            worldNode = {
+              type: "text",
+              parent: change.$value.parent ?? undefined,
+              text: change.$value.node,
+              dom: document.createTextNode(change.$value.node),
+            };
+          } else {
+            worldNode = {
+              type: "element",
+              parent: change.$value.parent ?? undefined,
+              class: change.$value.node.$tag,
+              attributes: change.$value.node.$value,
+              children: [],
+              dom: createDomElement(change.$value.node.$tag),
+            };
+          }
           if (this.#nodes[id] != null) {
             throw new Error(
               `tried to insert node ${id} but a node with that ID already exists`,
@@ -106,4 +108,33 @@ export interface WorldText {
   parent: NodeId | undefined;
   text: string;
   dom: Text;
+}
+
+interface WorldElementClass {
+  name: string;
+}
+
+const ELEMENTS = {
+  World: {
+    name: "div",
+  },
+  ProgressBar: {
+    name: "div",
+  },
+  Other: {
+    name: "span",
+  },
+} as const satisfies Record<string, WorldElementClass>;
+
+function createDomElement(className: string): HTMLElement {
+  const elementClass =
+    className in ELEMENTS
+      ? ELEMENTS[className as keyof typeof ELEMENTS]
+      : undefined;
+  if (elementClass != null) {
+    return document.createElement(elementClass.name);
+  } else {
+    // TODO: Show an error
+    return document.createElement("div");
+  }
 }
