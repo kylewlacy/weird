@@ -1,0 +1,1 @@
+Manually vendored from [the Styx monorepo](https://github.com/bearcove/styx) at commit [`8262fc4`](https://github.com/bearcove/styx/tree/8262fc4eeec926b2ce8792b264e25d5d3ac8abc5). Under the `implementations/styx-js` dir, I ran `npm install` / `npm run build`, then manually copied the `dist/` dir and the package files over.

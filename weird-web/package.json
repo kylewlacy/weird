@@ -11,6 +11,9 @@
     "check-format": "prettier . --check",
     "lint": "eslint"
   },
+  "dependencies": {
+    "@bearcove/styx": "file:../vendor/styx-js"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "eslint": "^9.39.2",
