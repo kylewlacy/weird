@@ -60,7 +60,7 @@ export class World {
   }
 
   printNodes() {
-    console.log(this.#nodes);
+    console.info(this.#nodes);
   }
 }
 

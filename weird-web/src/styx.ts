@@ -5,7 +5,6 @@ import * as z from "zod";
 export function parseStyx<T>(styx: string, type: z.ZodType<T>) {
   const document = parse(styx);
   const value = mapStyxEntries(document.entries);
-  console.log({ document, value });
   return type.parse(value);
 }
 

@@ -12,7 +12,7 @@ const world = new World();
 const socket = new WebSocket("http://localhost:2552/ws");
 
 socket.addEventListener("open", (_event) => {
-  console.log("[WebSocket] opened");
+  console.info("[WebSocket] opened");
   socket.send(`syncWorld {requestId "syncWorld"}`);
 });
 
@@ -42,7 +42,7 @@ socket.addEventListener("message", (event) => {
     return unreachable(message);
   }
 
-  console.log("[WebSocket] parsed", message);
+  console.info("[WebSocket] parsed", message);
 });
 
 socket.addEventListener("error", (event) => {
