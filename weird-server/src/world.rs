@@ -107,21 +107,37 @@ impl World {
         parent_children.insert(insert_index, insert.child);
         self.parents.insert(insert.child, insert.parent);
 
-        let mut changes = vec![];
-        let mut inserted_queue = VecDeque::from_iter([insert.child]);
-        while let Some(id) = inserted_queue.pop_front() {
-            changes.push(SyncChange::DidInsert {
-                id,
-                parent: self.parents[&id],
-                node: self.nodes[&id].clone(),
-            });
+        // Broadcast a message for node changes, but only if there's a listener.
+        // NOTE: This only makes sense if we can guarantee that someone else
+        // can't subscribe while this function is running! This is only valid
+        // here because we have `&mut` access to the sender and we never clone
+        // it, meaning a listener can't subscribe while where in this function.
+        // The assert helps catch if one of our assumptions breaks though.
+        assert!(self.change_sender.strong_count() == 1);
+        assert!(self.change_sender.weak_count() == 0);
 
-            if let Some(children) = self.children.get(&id) {
-                inserted_queue.extend(children.iter().copied());
+        let num_receivers = self.change_sender.receiver_count();
+        if num_receivers != 0 {
+            tracing::debug!(num_receivers, "broadcasting change event");
+            let mut changes = vec![];
+
+            let mut inserted_queue = VecDeque::from_iter([insert.child]);
+            while let Some(id) = inserted_queue.pop_front() {
+                changes.push(SyncChange::DidInsert {
+                    id,
+                    parent: self.parents[&id],
+                    node: self.nodes[&id].clone(),
+                });
+
+                if let Some(children) = self.children.get(&id) {
+                    inserted_queue.extend(children.iter().copied());
+                }
             }
-        }
 
-        let _ = self.change_sender.send(changes);
+            let _ = self.change_sender.send(changes);
+        } else {
+            tracing::debug!("no listeners, skipping change event");
+        }
 
         Ok(insert_index)
     }
