@@ -1,3 +1,4 @@
+import { parse } from "@bearcove/styx";
 import "./styles/main.css";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
@@ -12,7 +13,14 @@ socket.addEventListener("open", (_event) => {
 });
 
 socket.addEventListener("message", (event) => {
-  console.log("[WebSocket] message", event.data);
+  if (typeof event.data !== "string") {
+    console.warn("returned invalid type from WebSocket event, ignoring");
+    return;
+  }
+
+  console.log("[WebSocket] unparsed", event.data);
+  const message = parse(event.data);
+  console.log("[WebSocket] parsed", message);
 });
 
 socket.addEventListener("error", (event) => {
