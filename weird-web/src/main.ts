@@ -1,4 +1,5 @@
-import { parse } from "@bearcove/styx";
+import { parseStyx } from "./styx.ts";
+import { ServerMessage } from "./message.ts";
 import "./styles/main.css";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
@@ -14,12 +15,23 @@ socket.addEventListener("open", (_event) => {
 
 socket.addEventListener("message", (event) => {
   if (typeof event.data !== "string") {
-    console.warn("returned invalid type from WebSocket event, ignoring");
+    console.warn("returned invalid type from WebSocket event, ignoring", {
+      message: event.data,
+    });
     return;
   }
 
-  console.log("[WebSocket] unparsed", event.data);
-  const message = parse(event.data);
+  let message: ServerMessage;
+  try {
+    message = parseStyx(event.data, ServerMessage);
+  } catch (error) {
+    console.warn("failed to parse WebSocket message", {
+      message: event.data,
+      error,
+    });
+    return;
+  }
+
   console.log("[WebSocket] parsed", message);
 });
 
