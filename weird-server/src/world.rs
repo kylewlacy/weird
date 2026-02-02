@@ -7,6 +7,7 @@ pub struct World {
     nodes: BTreeMap<NodeId, Arc<Node>>,
     parents: BTreeMap<NodeId, NodeId>,
     children: BTreeMap<NodeId, Vec<NodeId>>,
+    change_sender: tokio::sync::broadcast::Sender<Vec<SyncChange>>,
 }
 
 impl World {
@@ -20,6 +21,7 @@ impl World {
             nodes: BTreeMap::from_iter([(ROOT_NODE_ID, Arc::new(root_node))]),
             parents: BTreeMap::new(),
             children: BTreeMap::from_iter([(ROOT_NODE_ID, vec![])]),
+            change_sender: tokio::sync::broadcast::Sender::new(10),
         }
     }
 
@@ -105,6 +107,22 @@ impl World {
         parent_children.insert(insert_index, insert.child);
         self.parents.insert(insert.child, insert.parent);
 
+        let mut changes = vec![];
+        let mut inserted_queue = VecDeque::from_iter([insert.child]);
+        while let Some(id) = inserted_queue.pop_front() {
+            changes.push(SyncChange::DidInsert {
+                id,
+                parent: self.parents[&id],
+                node: self.nodes[&id].clone(),
+            });
+
+            if let Some(children) = self.children.get(&id) {
+                inserted_queue.extend(children.iter().copied());
+            }
+        }
+
+        let _ = self.change_sender.send(changes);
+
         Ok(insert_index)
     }
 
@@ -172,6 +190,10 @@ impl World {
         }
 
         changes
+    }
+
+    pub fn subscribe_to_sync_changes(&self) -> tokio::sync::broadcast::Receiver<Vec<SyncChange>> {
+        self.change_sender.subscribe()
     }
 }
 
@@ -274,7 +296,7 @@ pub enum RemoveNodeFailed {
     NoParentNode,
 }
 
-#[derive(facet::Facet)]
+#[derive(Clone, facet::Facet)]
 #[repr(u8)]
 pub enum SyncChange {
     #[expect(unused)]
