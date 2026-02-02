@@ -164,7 +164,13 @@ impl World {
     }
 
     pub fn initial_sync(&self) -> Vec<SyncChange<'_>> {
-        let mut queue = VecDeque::from_iter([ROOT_NODE_ID]);
+        let root_children = match &self.nodes[&ROOT_NODE_ID] {
+            Node::Element(element) => &element.children,
+            Node::Text(_) => {
+                panic!("expected root node to be an element")
+            }
+        };
+        let mut queue: VecDeque<_> = root_children.iter().copied().collect();
         let mut changes = vec![];
 
         while let Some(id) = queue.pop_front() {

@@ -31,24 +31,22 @@ export class World {
           const id = change.$value.id;
           const parent = change.$value.parent ?? undefined;
           const worldNode: WorldNode =
-            id === ROOT_NODE_ID && this.#nodes[ROOT_NODE_ID] != null
-              ? this.#nodes[ROOT_NODE_ID]
-              : typeof change.$value.node === "string"
-                ? {
-                    type: "text",
-                    parent: change.$value.parent ?? undefined,
-                    text: change.$value.node,
-                    dom: document.createTextNode(change.$value.node),
-                  }
-                : {
-                    type: "element",
-                    parent: change.$value.parent ?? undefined,
-                    class: change.$value.node.$tag,
-                    attributes: change.$value.node.$value,
-                    children: [],
-                    dom: document.createElement("div"),
-                  };
-          if (this.#nodes[id] != null && id !== ROOT_NODE_ID) {
+            typeof change.$value.node === "string"
+              ? {
+                  type: "text",
+                  parent: change.$value.parent ?? undefined,
+                  text: change.$value.node,
+                  dom: document.createTextNode(change.$value.node),
+                }
+              : {
+                  type: "element",
+                  parent: change.$value.parent ?? undefined,
+                  class: change.$value.node.$tag,
+                  attributes: change.$value.node.$value,
+                  children: [],
+                  dom: document.createElement("div"),
+                };
+          if (this.#nodes[id] != null) {
             throw new Error(
               `tried to insert node ${id} but a node with that ID already exists`,
             );
@@ -75,9 +73,8 @@ export class World {
             }
           }
 
-          if (id !== ROOT_NODE_ID) {
-            this.#nodes[id] = worldNode;
-          }
+          this.#nodes[id] = worldNode;
+
           break;
         }
         default:
