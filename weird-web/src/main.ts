@@ -1,11 +1,14 @@
 import { parseStyx } from "./styx.ts";
 import { ServerMessage } from "./message.ts";
 import "./styles/main.css";
+import { World } from "./world.ts";
+import unreachable from "ts-unreachable";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <p>Hello world</p>
 `;
 
+const world = new World();
 const socket = new WebSocket("http://localhost:2552/ws");
 
 socket.addEventListener("open", (_event) => {
@@ -30,6 +33,13 @@ socket.addEventListener("message", (event) => {
       error,
     });
     return;
+  }
+
+  if ("syncWorld" in message) {
+    world.applyChanges(message.syncWorld.changes);
+    world.printNodes();
+  } else {
+    return unreachable(message);
   }
 
   console.log("[WebSocket] parsed", message);
