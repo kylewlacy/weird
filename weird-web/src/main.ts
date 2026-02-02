@@ -38,9 +38,15 @@ socket.addEventListener("message", (event) => {
     return;
   }
 
-  if ("syncWorld" in message) {
-    world.applyChanges(message.syncWorld.changes);
-    world.printNodes();
+  if ("event" in message) {
+    switch (message.event.$tag) {
+      case "DidInsert":
+        world.handleDidInsertEvent(message.event.$value);
+        world.printNodes();
+        break;
+      default:
+        return unreachable(message.event.$tag);
+    }
   } else {
     return unreachable(message);
   }

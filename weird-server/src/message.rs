@@ -1,4 +1,4 @@
-use crate::world::{NodeTree, SyncChange};
+use crate::world::{NodeTree, WorldChangeEvent};
 
 #[derive(Debug, facet::Facet)]
 #[repr(u8)]
@@ -20,15 +20,16 @@ pub struct SyncWorldRequest {
 #[derive(facet::Facet)]
 #[repr(u8)]
 #[facet(untagged)]
+#[expect(unused)]
 pub enum ServerMessage {
     #[facet(rename_all = "camelCase")]
-    #[expect(unused)]
-    SyncWorld { sync_world: SyncWorldResponse },
+    Event { event: ServerEvent, id: String },
 }
 
 #[derive(facet::Facet)]
-#[facet(rename_all = "camelCase")]
-pub struct SyncWorldResponse {
-    pub request_id: String,
-    pub changes: Vec<SyncChange>,
+#[repr(u8)]
+#[facet(untagged)]
+#[expect(unused)]
+pub enum ServerEvent {
+    WorldChange(WorldChangeEvent),
 }

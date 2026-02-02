@@ -7,7 +7,7 @@ pub struct World {
     nodes: BTreeMap<NodeId, Arc<Node>>,
     parents: BTreeMap<NodeId, NodeId>,
     children: BTreeMap<NodeId, Vec<NodeId>>,
-    change_sender: tokio::sync::broadcast::Sender<Vec<SyncChange>>,
+    world_change_events: tokio::sync::broadcast::Sender<WorldChangeEvent>,
 }
 
 impl World {
@@ -21,7 +21,7 @@ impl World {
             nodes: BTreeMap::from_iter([(ROOT_NODE_ID, Arc::new(root_node))]),
             parents: BTreeMap::new(),
             children: BTreeMap::from_iter([(ROOT_NODE_ID, vec![])]),
-            change_sender: tokio::sync::broadcast::Sender::new(10),
+            world_change_events: tokio::sync::broadcast::Sender::new(10),
         }
     }
 
@@ -113,28 +113,29 @@ impl World {
         // here because we have `&mut` access to the sender and we never clone
         // it, meaning a listener can't subscribe while where in this function.
         // The assert helps catch if one of our assumptions breaks though.
-        assert!(self.change_sender.strong_count() == 1);
-        assert!(self.change_sender.weak_count() == 0);
+        assert!(self.world_change_events.strong_count() == 1);
+        assert!(self.world_change_events.weak_count() == 0);
 
-        let num_receivers = self.change_sender.receiver_count();
+        let num_receivers = self.world_change_events.receiver_count();
         if num_receivers != 0 {
             tracing::debug!(num_receivers, "broadcasting change event");
-            let mut changes = vec![];
+            let mut event = DidInsertEvent { nodes: vec![] };
 
-            let mut inserted_queue = VecDeque::from_iter([insert.child]);
-            while let Some(id) = inserted_queue.pop_front() {
-                changes.push(SyncChange::DidInsert {
+            let mut queue = VecDeque::from_iter([insert.child]);
+            while let Some(id) = queue.pop_front() {
+                event.nodes.push(DidInsertNode {
                     id,
                     parent: self.parents[&id],
                     node: self.nodes[&id].clone(),
                 });
 
                 if let Some(children) = self.children.get(&id) {
-                    inserted_queue.extend(children.iter().copied());
+                    queue.extend(children.iter().copied());
                 }
             }
 
-            let _ = self.change_sender.send(changes);
+            let event = WorldChangeEvent::DidInsert(event);
+            let _ = self.world_change_events.send(event);
         } else {
             tracing::debug!("no listeners, skipping change event");
         }
@@ -176,13 +177,14 @@ impl World {
         Ok(*parent)
     }
 
-    pub fn initial_sync(&self) -> Vec<SyncChange> {
+    pub fn initial_client_world_change_event(&self) -> DidInsertEvent {
+        let mut event = DidInsertEvent { nodes: vec![] };
+
         let root_children = self
             .children
             .get(&ROOT_NODE_ID)
             .expect("root node does not have child list");
         let mut queue: VecDeque<_> = root_children.iter().copied().collect();
-        let mut changes = vec![];
 
         while let Some(id) = queue.pop_front() {
             if let Some(children) = self.children.get(&id) {
@@ -198,18 +200,20 @@ impl World {
                 .get(&id)
                 .unwrap_or_else(|| panic!("node {id:?} does not have a parent"));
 
-            changes.push(SyncChange::DidInsert {
+            event.nodes.push(DidInsertNode {
                 id,
                 parent: *parent,
                 node: node.clone(),
             });
         }
 
-        changes
+        event
     }
 
-    pub fn subscribe_to_sync_changes(&self) -> tokio::sync::broadcast::Receiver<Vec<SyncChange>> {
-        self.change_sender.subscribe()
+    pub fn subscribe_to_world_change_events(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<WorldChangeEvent> {
+        self.world_change_events.subscribe()
     }
 }
 
@@ -314,11 +318,21 @@ pub enum RemoveNodeFailed {
 
 #[derive(Clone, facet::Facet)]
 #[repr(u8)]
-pub enum SyncChange {
-    #[expect(unused)]
-    DidInsert {
-        id: NodeId,
-        parent: NodeId,
-        node: Arc<Node>,
-    },
+#[expect(unused)]
+pub enum WorldChangeEvent {
+    DidInsert(DidInsertEvent),
+}
+
+#[derive(Clone, facet::Facet)]
+#[facet(rename_all = "camelCase")]
+pub struct DidInsertEvent {
+    nodes: Vec<DidInsertNode>,
+}
+
+#[derive(Clone, facet::Facet)]
+#[facet(rename_all = "camelCase")]
+pub struct DidInsertNode {
+    id: NodeId,
+    parent: NodeId,
+    node: Arc<Node>,
 }

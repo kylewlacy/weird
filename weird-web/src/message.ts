@@ -30,7 +30,27 @@ export const SyncWorldResponse = z.object({
 });
 export type SyncWorldResponse = z.infer<typeof SyncWorldResponse>;
 
+export const DidInsertNode = z.object({
+  id: NodeId,
+  parent: NodeId,
+  node: FlatNode,
+});
+export type DidInsertNode = z.infer<typeof DidInsertNode>;
+
+export const DidInsertEvent = z.object({
+  nodes: DidInsertNode.array(),
+});
+export type DidInsertEvent = z.infer<typeof DidInsertEvent>;
+
 export const ServerMessage = z.union([
-  z.object({ syncWorld: SyncWorldResponse }),
+  z.object({
+    id: z.string(),
+    event: z.discriminatedUnion("$tag", [
+      z.object({
+        $tag: z.literal("DidInsert"),
+        $value: DidInsertEvent,
+      }),
+    ]),
+  }),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;

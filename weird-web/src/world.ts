@@ -1,5 +1,5 @@
 import unreachable from "ts-unreachable";
-import { NodeId, type SyncChange } from "./message";
+import { type DidInsertEvent, NodeId } from "./message";
 
 const ROOT_NODE_ID = NodeId.parse("0");
 
@@ -24,64 +24,52 @@ export class World {
     element.appendChild(rootNode.dom);
   }
 
-  applyChanges(changes: SyncChange[]) {
-    for (const change of changes) {
-      switch (change.$tag) {
-        case "DidInsert": {
-          const id = change.$value.id;
-          const parent = change.$value.parent ?? undefined;
-          let worldNode: WorldNode;
-          if (typeof change.$value.node === "string") {
-            worldNode = {
-              type: "text",
-              parent: change.$value.parent,
-              text: change.$value.node,
-              dom: document.createTextNode(change.$value.node),
-            };
-          } else {
-            worldNode = {
-              type: "element",
-              parent: change.$value.parent,
-              class: change.$value.node.$tag,
-              attributes: change.$value.node.$value,
-              children: [],
-              dom: createDomElement(change.$value.node.$tag),
-            };
-          }
-          if (this.#nodes[id] != null) {
-            throw new Error(
-              `tried to insert node ${id} but a node with that ID already exists`,
-            );
-          }
-
-          if (parent) {
-            const parentNode = this.#nodes[parent];
-            if (parentNode == null) {
-              throw new Error(
-                `tried to insert node ${id} but parent ${parent} not found`,
-              );
-            }
-            switch (parentNode?.type) {
-              case "element":
-                parentNode.children.push(id);
-                parentNode.dom.appendChild(worldNode.dom);
-                break;
-              case "text":
-                throw new Error(
-                  `cannot add node ${id} as a child of ${parent}`,
-                );
-              default:
-                return unreachable(parentNode);
-            }
-          }
-
-          this.#nodes[id] = worldNode;
-
-          break;
-        }
-        default:
-          return unreachable(change.$tag);
+  handleDidInsertEvent(event: DidInsertEvent) {
+    for (const inserted of event.nodes) {
+      let worldNode: WorldNode;
+      if (typeof inserted.node === "string") {
+        worldNode = {
+          type: "text",
+          parent: inserted.parent,
+          text: inserted.node,
+          dom: document.createTextNode(inserted.node),
+        };
+      } else {
+        worldNode = {
+          type: "element",
+          parent: inserted.parent,
+          class: inserted.node.$tag,
+          attributes: inserted.node.$value,
+          children: [],
+          dom: createDomElement(inserted.node.$tag),
+        };
       }
+      if (this.#nodes[inserted.id] != null) {
+        throw new Error(
+          `tried to insert node ${inserted.id} but a node with that ID already exists`,
+        );
+      }
+
+      const parentNode = this.#nodes[inserted.parent];
+      if (parentNode == null) {
+        throw new Error(
+          `tried to insert node ${inserted.id} but parent ${inserted.parent} not found`,
+        );
+      }
+      switch (parentNode?.type) {
+        case "element":
+          parentNode.children.push(inserted.id);
+          parentNode.dom.appendChild(worldNode.dom);
+          break;
+        case "text":
+          throw new Error(
+            `cannot add node ${inserted.id} as a child of ${parent}`,
+          );
+        default:
+          return unreachable(parentNode);
+      }
+
+      this.#nodes[inserted.id] = worldNode;
     }
   }
 

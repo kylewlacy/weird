@@ -8,7 +8,7 @@ use futures_util::{SinkExt as _, StreamExt as _};
 use tokio::sync::RwLock;
 
 use crate::{
-    message::{Message, ServerMessage, SyncWorldRequest, SyncWorldResponse},
+    message::{Message, ServerEvent, ServerMessage, SyncWorldRequest},
     world::World,
 };
 
@@ -100,13 +100,13 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                 sync_world: SyncWorldRequest { request_id },
             } => {
                 let world = state.world.read().await;
-                let changes = world.initial_sync();
-                let mut changes_rx = world.subscribe_to_sync_changes();
-                let response = ServerMessage::SyncWorld {
-                    sync_world: SyncWorldResponse {
-                        request_id: request_id.clone(),
-                        changes,
-                    },
+                let event = world.initial_client_world_change_event();
+                let mut events_rx = world.subscribe_to_world_change_events();
+                let response = ServerMessage::Event {
+                    id: request_id.clone(),
+                    event: ServerEvent::WorldChange(crate::world::WorldChangeEvent::DidInsert(
+                        event,
+                    )),
                 };
 
                 let styx = facet_styx::to_string(&response);
@@ -130,19 +130,19 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                 let socket_tx = socket_tx.clone();
                 tokio::spawn(async move {
                     loop {
-                        let changes = changes_rx.recv().await;
-                        let changes = match changes {
-                            Ok(changes) => changes,
+                        let event = events_rx.recv().await;
+                        let event = match event {
+                            Ok(event) => event,
                             Err(error) => {
-                                tracing::warn!("changes subscription failed to receive: {error}");
+                                tracing::warn!(
+                                    "WorldChangeEvent subscription failed to receive: {error}"
+                                );
                                 break;
                             }
                         };
-                        let response = ServerMessage::SyncWorld {
-                            sync_world: SyncWorldResponse {
-                                request_id: request_id.clone(),
-                                changes,
-                            },
+                        let response = ServerMessage::Event {
+                            id: request_id.clone(),
+                            event: ServerEvent::WorldChange(event),
                         };
 
                         let styx = facet_styx::to_string(&response);
