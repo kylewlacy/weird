@@ -17,7 +17,7 @@ export const SyncChange = z.discriminatedUnion("$tag", [
     $tag: z.literal("DidInsert"),
     $value: z.object({
       id: NodeId,
-      parent: NodeId.nullish(),
+      parent: NodeId,
       node: FlatNode,
     }),
   }),

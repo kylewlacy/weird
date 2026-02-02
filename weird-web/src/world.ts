@@ -34,14 +34,14 @@ export class World {
           if (typeof change.$value.node === "string") {
             worldNode = {
               type: "text",
-              parent: change.$value.parent ?? undefined,
+              parent: change.$value.parent,
               text: change.$value.node,
               dom: document.createTextNode(change.$value.node),
             };
           } else {
             worldNode = {
               type: "element",
-              parent: change.$value.parent ?? undefined,
+              parent: change.$value.parent,
               class: change.$value.node.$tag,
               attributes: change.$value.node.$value,
               children: [],

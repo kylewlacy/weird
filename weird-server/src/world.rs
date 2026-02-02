@@ -183,9 +183,15 @@ impl World {
                 }
             }
 
+            // Every node has a parent except for the root node, which
+            // is excluded from the `DidInsert` event
+            let parent = node
+                .parent()
+                .unwrap_or_else(|| panic!("node {id:?} does not have a parent"));
+
             changes.push(SyncChange::DidInsert {
                 id,
-                parent: node.parent(),
+                parent,
                 node: FlatNode::from(node),
             });
         }
@@ -357,7 +363,7 @@ pub enum SyncChange<'a> {
     #[expect(unused)]
     DidInsert {
         id: NodeId,
-        parent: Option<NodeId>,
+        parent: NodeId,
         node: FlatNode<'a>,
     },
 }
