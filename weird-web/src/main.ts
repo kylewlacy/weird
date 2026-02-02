@@ -4,11 +4,14 @@ import "./styles/main.css";
 import { World } from "./world.ts";
 import unreachable from "ts-unreachable";
 
-document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
-  <p>Hello world</p>
-`;
+const appElement = document.getElementById("app");
+if (appElement == null) {
+  throw new Error("#app not found");
+}
 
 const world = new World();
+world.mount(appElement);
+
 const socket = new WebSocket("http://localhost:2552/ws");
 
 socket.addEventListener("open", (_event) => {

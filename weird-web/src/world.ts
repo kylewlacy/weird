@@ -1,8 +1,28 @@
 import unreachable from "ts-unreachable";
-import type { NodeId, SyncChange } from "./message";
+import { NodeId, type SyncChange } from "./message";
+
+const ROOT_NODE_ID = NodeId.parse("0");
 
 export class World {
-  #nodes: Record<NodeId, Node> = {};
+  #nodes: Record<NodeId, WorldNode> = {
+    [ROOT_NODE_ID]: {
+      type: "element",
+      class: "World",
+      attributes: {},
+      children: [],
+      dom: document.createElement("div"),
+      parent: undefined,
+    },
+  };
+
+  mount(element: HTMLElement) {
+    const rootNode = this.#nodes[ROOT_NODE_ID];
+    if (rootNode == null) {
+      throw new Error("root node not found");
+    }
+
+    element.appendChild(rootNode.dom);
+  }
 
   applyChanges(changes: SyncChange[]) {
     for (const change of changes) {
@@ -10,21 +30,25 @@ export class World {
         case "DidInsert": {
           const id = change.$value.id;
           const parent = change.$value.parent ?? undefined;
-          const newNode: Node =
-            typeof change.$value.node === "string"
-              ? {
-                  type: "text",
-                  parent,
-                  text: change.$value.node,
-                }
-              : {
-                  type: "element",
-                  parent,
-                  class: change.$value.node.$tag,
-                  attributes: change.$value.node.$value,
-                  children: [],
-                };
-          if (this.#nodes[id] != null) {
+          const worldNode: WorldNode =
+            id === ROOT_NODE_ID && this.#nodes[ROOT_NODE_ID] != null
+              ? this.#nodes[ROOT_NODE_ID]
+              : typeof change.$value.node === "string"
+                ? {
+                    type: "text",
+                    parent: change.$value.parent ?? undefined,
+                    text: change.$value.node,
+                    dom: document.createTextNode(change.$value.node),
+                  }
+                : {
+                    type: "element",
+                    parent: change.$value.parent ?? undefined,
+                    class: change.$value.node.$tag,
+                    attributes: change.$value.node.$value,
+                    children: [],
+                    dom: document.createElement("div"),
+                  };
+          if (this.#nodes[id] != null && id !== ROOT_NODE_ID) {
             throw new Error(
               `tried to insert node ${id} but a node with that ID already exists`,
             );
@@ -40,6 +64,7 @@ export class World {
             switch (parentNode?.type) {
               case "element":
                 parentNode.children.push(id);
+                parentNode.dom.appendChild(worldNode.dom);
                 break;
               case "text":
                 throw new Error(
@@ -50,7 +75,9 @@ export class World {
             }
           }
 
-          this.#nodes[id] = newNode;
+          if (id !== ROOT_NODE_ID) {
+            this.#nodes[id] = worldNode;
+          }
           break;
         }
         default:
@@ -64,9 +91,9 @@ export class World {
   }
 }
 
-export type Node = Element | Text;
+export type WorldNode = WorldElement | WorldText;
 
-export interface Element {
+export interface WorldElement {
   type: "element";
   parent: NodeId | undefined;
   class: string | undefined;
@@ -74,10 +101,12 @@ export interface Element {
   attributes: {
     [attr: string]: unknown;
   };
+  dom: HTMLElement;
 }
 
-export interface Text {
+export interface WorldText {
   type: "text";
   parent: NodeId | undefined;
   text: string;
+  dom: Text;
 }
