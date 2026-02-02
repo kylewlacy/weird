@@ -1,20 +1,25 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::{
+    collections::{BTreeMap, HashMap, VecDeque},
+    sync::Arc,
+};
 
 pub struct World {
-    nodes: BTreeMap<NodeId, Node>,
+    nodes: BTreeMap<NodeId, Arc<Node>>,
+    parents: BTreeMap<NodeId, NodeId>,
+    children: BTreeMap<NodeId, Vec<NodeId>>,
 }
 
 impl World {
     pub fn new() -> Self {
         let root_node = Node::Element(Element {
-            parent: None,
             class: Some("World".to_string()),
             properties: ElementProperties::default(),
-            children: vec![],
         });
 
         Self {
-            nodes: BTreeMap::from_iter([(ROOT_NODE_ID, root_node)]),
+            nodes: BTreeMap::from_iter([(ROOT_NODE_ID, Arc::new(root_node))]),
+            parents: BTreeMap::new(),
+            children: BTreeMap::from_iter([(ROOT_NODE_ID, vec![])]),
         }
     }
 
@@ -32,37 +37,32 @@ impl World {
             let id = next_id;
             next_id = NodeId(next_id.0 + 1);
 
-            let node = match node_tree.data {
-                NodeTreeData::Text(text) => Node::Text(Text { parent, text }),
+            match node_tree.data {
+                NodeTreeData::Text(text) => {
+                    self.nodes.insert(id, Arc::new(Node::Text(text)));
+                }
                 NodeTreeData::Element(element) => {
-                    let num_children = element.children.len();
-
                     queue.extend(element.children.into_iter().map(|child| (child, Some(id))));
 
-                    Node::Element(Element {
-                        parent,
-                        class: node_tree.class,
-                        properties: element.properties,
-                        children: Vec::with_capacity(num_children),
-                    })
+                    self.nodes.insert(
+                        id,
+                        Arc::new(Node::Element(Element {
+                            class: node_tree.class,
+                            properties: element.properties,
+                        })),
+                    );
+                    self.children.insert(id, vec![]);
                 }
             };
 
-            self.nodes.insert(id, node);
-
             if let Some(parent) = parent {
-                let parent_node = &mut self
-                    .nodes
+                self.parents.insert(id, parent);
+
+                let parent_children = self
+                    .children
                     .get_mut(&parent)
-                    .expect("parent element not found");
-                match parent_node {
-                    Node::Element(element) => {
-                        element.children.push(id);
-                    }
-                    Node::Text(_) => {
-                        panic!("parent node is not an element");
-                    }
-                }
+                    .expect("parent element does not have a list of children");
+                parent_children.push(id);
             }
         }
 
@@ -70,18 +70,20 @@ impl World {
     }
 
     pub fn insert_node(&mut self, insert: InsertNode) -> Result<usize, InsertNodeFailed> {
-        let parent_node = self
-            .nodes
-            .get_mut(&insert.parent)
-            .ok_or(InsertNodeFailed::ParentNotFound)?;
-        let parent_element = match parent_node {
-            Node::Element(parent_element) => parent_element,
-            Node::Text(_) => {
+        if !self.nodes.contains_key(&insert.child) {
+            return Err(InsertNodeFailed::NodeNotFound);
+        }
+
+        let parent_children = self.children.get_mut(&insert.parent);
+        let Some(parent_children) = parent_children else {
+            if self.nodes.contains_key(&insert.parent) {
+                return Err(InsertNodeFailed::ParentNotFound);
+            } else {
                 return Err(InsertNodeFailed::InvalidParentNodeType);
             }
         };
 
-        let num_children = parent_element.children.len();
+        let num_children = parent_children.len();
         let insert_index = match insert.offset {
             InsertNodeOffset::FromStart(offset) => offset,
             InsertNodeOffset::FromEnd(offset) => {
@@ -99,53 +101,30 @@ impl World {
                 num_children,
             });
         }
-        parent_element.children.insert(insert_index, insert.child);
 
-        let node = self.nodes.get_mut(&insert.child);
-        let Some(node) = node else {
-            // Node not found! Remove the reference in the parent node we
-            // just added, then return an error
-
-            let parent_node = self.nodes.get_mut(&insert.parent).unwrap();
-            let parent_element = match parent_node {
-                Node::Element(parent_element) => parent_element,
-                Node::Text(_) => {
-                    panic!("parent node isn't valid anymore?");
-                }
-            };
-            parent_element.children.remove(insert_index);
-
-            return Err(InsertNodeFailed::NodeNotFound);
-        };
-
-        *node.parent_mut() = Some(insert.parent);
+        parent_children.insert(insert_index, insert.child);
+        self.parents.insert(insert.child, insert.parent);
 
         Ok(insert_index)
     }
 
     #[expect(unused)]
     pub fn remove_node(&mut self, node_id: NodeId) -> Result<NodeId, RemoveNodeFailed> {
-        let node = self
-            .nodes
-            .get_mut(&node_id)
-            .ok_or(RemoveNodeFailed::NodeNotFound)?;
-        let parent_node_id = node
-            .parent_mut()
-            .take()
-            .ok_or(RemoveNodeFailed::NoParentNode)?;
-        let mut parent_node = self
-            .nodes
-            .get_mut(&parent_node_id)
-            .unwrap_or_else(|| panic!("tried to remove {node_id:?} but parent node not found"));
+        if !self.nodes.contains_key(&node_id) {
+            return Err(RemoveNodeFailed::NodeNotFound);
+        }
 
-        let parent_element = match parent_node {
-            Node::Element(parent_element) => parent_element,
-            Node::Text(_) => {
-                panic!("tried to remove {node_id:?} but parent is not an element");
-            }
-        };
-        let child_pos = parent_element
+        let parent = self
+            .parents
+            .get(&node_id)
+            .ok_or(RemoveNodeFailed::NoParentNode)?;
+
+        let parent_children = self
             .children
+            .get_mut(parent)
+            .unwrap_or_else(|| panic!("children not found for parent {parent:?}"));
+
+        let child_pos = parent_children
             .iter()
             .enumerate()
             .find_map(|(pos, child_id)| {
@@ -158,41 +137,37 @@ impl World {
             .unwrap_or_else(|| {
                 panic!("tried to remove {node_id:?} but parent element did not contain it")
             });
-        parent_element.children.remove(child_pos);
+        parent_children.remove(child_pos);
 
-        Ok(parent_node_id)
+        Ok(*parent)
     }
 
-    pub fn initial_sync(&self) -> Vec<SyncChange<'_>> {
-        let root_children = match &self.nodes[&ROOT_NODE_ID] {
-            Node::Element(element) => &element.children,
-            Node::Text(_) => {
-                panic!("expected root node to be an element")
-            }
-        };
+    pub fn initial_sync(&self) -> Vec<SyncChange> {
+        let root_children = self
+            .children
+            .get(&ROOT_NODE_ID)
+            .expect("root node does not have child list");
         let mut queue: VecDeque<_> = root_children.iter().copied().collect();
         let mut changes = vec![];
 
         while let Some(id) = queue.pop_front() {
-            let node = &self.nodes[&id];
-
-            match &node {
-                Node::Text(_) => {}
-                Node::Element(element) => {
-                    queue.extend(element.children.iter().copied());
-                }
+            if let Some(children) = self.children.get(&id) {
+                queue.extend(children.iter().copied());
             }
+
+            let node = &self.nodes[&id];
 
             // Every node has a parent except for the root node, which
             // is excluded from the `DidInsert` event
-            let parent = node
-                .parent()
+            let parent = self
+                .parents
+                .get(&id)
                 .unwrap_or_else(|| panic!("node {id:?} does not have a parent"));
 
             changes.push(SyncChange::DidInsert {
                 id,
-                parent,
-                node: FlatNode::from(node),
+                parent: *parent,
+                node: node.clone(),
             });
         }
 
@@ -243,42 +218,17 @@ pub struct ElementTreeData {
 #[derive(Debug, facet::Facet)]
 #[repr(u8)]
 #[facet(untagged)]
-pub enum FlatNode<'a> {
-    Text(#[expect(unused)] &'a str),
-    Element(#[expect(unused)] FlatElement<'a>),
-}
-
-impl<'a> From<&'a Node> for FlatNode<'a> {
-    fn from(node: &'a Node) -> Self {
-        match node {
-            Node::Text(Text { text, parent: _ }) => Self::Text(text),
-            Node::Element(element) => Self::Element(element.into()),
-        }
-    }
+pub enum Node {
+    Text(#[expect(unused)] String),
+    Element(#[expect(unused)] Element),
 }
 
 #[derive(Debug, facet::Facet)]
 #[facet(metadata_container)]
-pub struct FlatElement<'a> {
+pub struct Element {
     #[facet(metadata = "tag")]
-    class: Option<&'a str>,
-    properties: &'a ElementProperties,
-}
-
-impl<'a> From<&'a Element> for FlatElement<'a> {
-    fn from(element: &'a Element) -> Self {
-        let Element {
-            class,
-            children: _,
-            parent: _,
-            properties,
-        } = element;
-
-        Self {
-            class: class.as_deref(),
-            properties,
-        }
-    }
+    class: Option<String>,
+    properties: ElementProperties,
 }
 
 #[derive(Debug, Default, facet::Facet)]
@@ -286,39 +236,6 @@ impl<'a> From<&'a Element> for FlatElement<'a> {
 pub struct ElementProperties {
     #[facet(flatten)]
     attributes: HashMap<String, String>,
-}
-
-enum Node {
-    Text(Text),
-    Element(Element),
-}
-
-impl Node {
-    fn parent(&self) -> Option<NodeId> {
-        match self {
-            Self::Text(text) => text.parent,
-            Self::Element(element) => element.parent,
-        }
-    }
-
-    fn parent_mut(&mut self) -> &mut Option<NodeId> {
-        match self {
-            Self::Text(text) => &mut text.parent,
-            Self::Element(element) => &mut element.parent,
-        }
-    }
-}
-
-pub struct Text {
-    parent: Option<NodeId>,
-    text: String,
-}
-
-pub struct Element {
-    parent: Option<NodeId>,
-    class: Option<String>,
-    children: Vec<NodeId>,
-    properties: ElementProperties,
 }
 
 pub struct InsertNode {
@@ -359,11 +276,11 @@ pub enum RemoveNodeFailed {
 
 #[derive(facet::Facet)]
 #[repr(u8)]
-pub enum SyncChange<'a> {
+pub enum SyncChange {
     #[expect(unused)]
     DidInsert {
         id: NodeId,
         parent: NodeId,
-        node: FlatNode<'a>,
+        node: Arc<Node>,
     },
 }

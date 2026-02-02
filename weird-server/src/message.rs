@@ -20,15 +20,15 @@ pub struct SyncWorldRequest {
 #[derive(facet::Facet)]
 #[repr(u8)]
 #[facet(untagged)]
-pub enum ServerMessage<'a> {
+pub enum ServerMessage {
     #[facet(rename_all = "camelCase")]
     #[expect(unused)]
-    SyncWorld { sync_world: SyncWorldResponse<'a> },
+    SyncWorld { sync_world: SyncWorldResponse },
 }
 
 #[derive(facet::Facet)]
 #[facet(rename_all = "camelCase")]
-pub struct SyncWorldResponse<'a> {
+pub struct SyncWorldResponse {
     pub request_id: String,
-    pub changes: Vec<SyncChange<'a>>,
+    pub changes: Vec<SyncChange>,
 }
