@@ -72,6 +72,20 @@ impl World {
     }
 
     pub fn insert_node(&mut self, insert: InsertNode) -> Result<usize, InsertNodeFailed> {
+        let mut event = WorldDidChangeEvent::default();
+
+        let insert_index = self.insert_node_for_event(insert, &mut event)?;
+
+        let _ = self.world_did_change_events.send(event);
+
+        Ok(insert_index)
+    }
+
+    fn insert_node_for_event(
+        &mut self,
+        insert: InsertNode,
+        event: &mut WorldDidChangeEvent,
+    ) -> Result<usize, InsertNodeFailed> {
         if !self.nodes.contains_key(&insert.child) {
             return Err(InsertNodeFailed::NodeNotFound);
         }
@@ -107,41 +121,23 @@ impl World {
         parent_children.insert(insert_index, insert.child);
         self.parents.insert(insert.child, insert.parent);
 
-        // Broadcast a message for node changes, but only if there's a listener.
-        // NOTE: This only makes sense if we can guarantee that someone else
-        // can't subscribe while this function is running! This is only valid
-        // here because we have `&mut` access to the sender and we never clone
-        // it, meaning a listener can't subscribe while where in this function.
-        // The assert helps catch if one of our assumptions breaks though.
-        assert!(self.world_did_change_events.strong_count() == 1);
-        assert!(self.world_did_change_events.weak_count() == 0);
+        let mut queue = VecDeque::from_iter([insert.child]);
+        while let Some(id) = queue.pop_front() {
+            event.inserted.push(InsertedNode {
+                id,
+                parent: self.parents[&id],
+                node: self.nodes[&id].clone(),
+            });
 
-        let num_receivers = self.world_did_change_events.receiver_count();
-        if num_receivers != 0 {
-            tracing::debug!(num_receivers, "broadcasting change event");
-            let mut event = WorldDidChangeEvent::default();
-
-            let mut queue = VecDeque::from_iter([insert.child]);
-            while let Some(id) = queue.pop_front() {
-                event.inserted.push(InsertedNode {
-                    id,
-                    parent: self.parents[&id],
-                    node: self.nodes[&id].clone(),
-                });
-
-                if let Some(children) = self.children.get(&id) {
-                    queue.extend(children.iter().copied());
-                }
+            if let Some(children) = self.children.get(&id) {
+                queue.extend(children.iter().copied());
             }
-
-            let _ = self.world_did_change_events.send(event);
-        } else {
-            tracing::debug!("no listeners, skipping change event");
         }
 
         Ok(insert_index)
     }
 
+    #[expect(unused)]
     pub fn remove_node(&mut self, node_id: NodeId) -> Result<NodeId, RemoveNodeFailed> {
         if !self.nodes.contains_key(&node_id) {
             return Err(RemoveNodeFailed::NodeNotFound);
@@ -187,8 +183,69 @@ impl World {
         Ok(*parent)
     }
 
-    pub fn node_children(&self, node_id: NodeId) -> Option<&[NodeId]> {
-        self.children.get(&node_id).map(|children| &**children)
+    pub fn set_node_children(
+        &mut self,
+        node_id: NodeId,
+        children: Vec<NodeTree>,
+    ) -> Result<(), SetNodeChildrenFailed> {
+        let mut event = WorldDidChangeEvent::default();
+
+        if !self.nodes.contains_key(&node_id) {
+            return Err(SetNodeChildrenFailed::NodeNotFound);
+        }
+
+        let Some(prev_children) = self.children.get(&node_id) else {
+            return Err(SetNodeChildrenFailed::InvalidNodeType);
+        };
+
+        tracing::info!("removing direct descendents: {:?}", prev_children);
+        event.removed.extend(prev_children.iter().copied());
+
+        let mut remove_queue: VecDeque<_> = prev_children.iter().copied().collect();
+        while let Some(remove) = remove_queue.pop_front() {
+            self.nodes.remove(&remove);
+            let parent_id = self.parents.remove(&remove);
+            if let Some(parent_id) = parent_id {
+                let parent_children = self
+                    .children
+                    .get_mut(&parent_id)
+                    .expect("parent children not found");
+                let parent_child_index = parent_children
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, parent_child)| {
+                        if *parent_child == remove {
+                            Some(i)
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("node not found within parent node's children");
+                parent_children.remove(parent_child_index);
+            }
+            let removed_children = self.children.remove(&remove);
+
+            tracing::info!("removing (recursive): {:?}", remove);
+
+            remove_queue.extend(removed_children.into_iter().flatten());
+        }
+
+        for child in children {
+            let child = self.create_node(child);
+            self.insert_node_for_event(
+                InsertNode {
+                    parent: node_id,
+                    child,
+                    offset: InsertNodeOffset::END,
+                },
+                &mut event,
+            )
+            .unwrap_or_else(|error| panic!("failed to insert node: {error:?}"));
+        }
+
+        let _ = self.world_did_change_events.send(event);
+
+        Ok(())
     }
 
     pub fn initial_client_world_did_change_event(&self) -> WorldDidChangeEvent {
@@ -354,6 +411,12 @@ pub enum InsertNodeFailed {
 pub enum RemoveNodeFailed {
     NodeNotFound,
     NoParentNode,
+}
+
+#[derive(Debug)]
+pub enum SetNodeChildrenFailed {
+    NodeNotFound,
+    InvalidNodeType,
 }
 
 #[derive(Default, Clone, facet::Facet)]

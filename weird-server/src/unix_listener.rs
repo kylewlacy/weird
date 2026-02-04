@@ -60,48 +60,33 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
             ClientMessage::Show { show } => {
                 let mut world = state.world.write().await;
 
-                let frame_node = if let Some(frame_node) = frame_node {
-                    frame_node
+                if let Some(frame_node) = frame_node {
+                    let result = world.set_node_children(frame_node, show);
+                    if let Err(error) = result {
+                        tracing::error!("failed to update node in show message: {error:?}");
+                        break;
+                    }
                 } else {
-                    let node = world.create_node(
-                        crate::world::ElementTree::new(
-                            "Frame",
-                            crate::world::ElementProperties::default(),
-                            vec![],
-                        )
-                        .into(),
+                    let frame_node = frame_node.insert(
+                        world.create_node(
+                            crate::world::ElementTree::new(
+                                "Frame",
+                                crate::world::ElementProperties::default(),
+                                show,
+                            )
+                            .into(),
+                        ),
                     );
                     let result = world.insert_node(InsertNode {
                         parent: ROOT_NODE_ID,
-                        child: node,
+                        child: *frame_node,
                         offset: InsertNodeOffset::END,
                     });
                     if let Err(error) = result {
                         tracing::error!("failed to insert node in show message: {error:?}");
                         break;
                     }
-                    *frame_node.insert(node)
                 };
-
-                let frame_children = world.node_children(frame_node).unwrap_or_default().to_vec();
-                for child in frame_children {
-                    let _ = world.remove_node(child).inspect_err(|error| {
-                        tracing::warn!("failed to remove node in show message: {error:?}");
-                    });
-                }
-
-                for node in show {
-                    let node = world.create_node(node);
-                    let _ = world
-                        .insert_node(InsertNode {
-                            parent: frame_node,
-                            child: node,
-                            offset: InsertNodeOffset::END,
-                        })
-                        .inspect_err(|error| {
-                            tracing::warn!("failed to insert node in show message: {error:?}");
-                        });
-                }
             }
             ClientMessage::SyncWorld { .. } => {
                 tracing::warn!("message not supported for Unix connections");
