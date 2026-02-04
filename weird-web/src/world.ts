@@ -25,7 +25,13 @@ export class World {
   }
 
   handleWorldDidChangeEvent(event: WorldDidChangeEvent) {
-    for (const removed of event.removed) {
+    const removeQueue = event.removed;
+    while (true) {
+      const removed = removeQueue.shift();
+      if (removed == null) {
+        break;
+      }
+
       const worldNode = this.#nodes[removed];
       if (worldNode == null) {
         console.warn(
@@ -58,10 +64,21 @@ export class World {
           break;
         case null:
         case undefined:
-          console.warn("parent node not found for node", worldNode);
+          // Parent node not found. This is expected since we're removing
+          // nodes outside-in
           break;
         default:
           return unreachable(parentNode);
+      }
+
+      switch (worldNode.type) {
+        case "element":
+          removeQueue.push(...worldNode.children);
+          break;
+        case "text":
+          break;
+        default:
+          return unreachable(worldNode);
       }
     }
 

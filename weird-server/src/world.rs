@@ -203,13 +203,15 @@ impl World {
 
         let mut remove_queue: VecDeque<_> = prev_children.iter().copied().collect();
         while let Some(remove) = remove_queue.pop_front() {
+            tracing::info!(?remove, parent = ?self.parents.get(&remove), children = ?self.children.get(&remove), "removing");
+
             self.nodes.remove(&remove);
             let parent_id = self.parents.remove(&remove);
-            if let Some(parent_id) = parent_id {
-                let parent_children = self
-                    .children
-                    .get_mut(&parent_id)
-                    .expect("parent children not found");
+            let parent_children = parent_id.and_then(|parent_id| self.children.get_mut(&parent_id));
+
+            // Remove the parent node if it still exists. Since we remove
+            // nodes outside-in, we'll remove a parent before its children.
+            if let Some(parent_children) = parent_children {
                 let parent_child_index = parent_children
                     .iter()
                     .enumerate()
@@ -224,8 +226,6 @@ impl World {
                 parent_children.remove(parent_child_index);
             }
             let removed_children = self.children.remove(&remove);
-
-            tracing::info!("removing (recursive): {:?}", remove);
 
             remove_queue.extend(removed_children.into_iter().flatten());
         }
