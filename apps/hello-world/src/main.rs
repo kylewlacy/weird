@@ -9,20 +9,40 @@ fn main() {
 
     writeln!(weird, "{}", r#"show ("Starting...")"#).unwrap();
     std::thread::sleep(DELAY);
-    writeln!(weird, "{}", r#"show ("Running 1/5")"#).unwrap();
-    std::thread::sleep(DELAY);
-    writeln!(weird, "{}", r#"show ("Running 2/5")"#).unwrap();
-    std::thread::sleep(DELAY);
-    writeln!(weird, "{}", r#"show ("Running 3/5")"#).unwrap();
-    std::thread::sleep(DELAY);
-    writeln!(weird, "{}", r#"show ("Running 4/5")"#).unwrap();
-    std::thread::sleep(DELAY);
-    writeln!(weird, "{}", r#"show ("Running 5/5")"#).unwrap();
+    writeln!(
+        weird,
+        "{}",
+        r#"show ("Running 1/5" @ProgressBar{value 1, max 5, children (@Other{} "Progress 1")})"#
+    )
+    .unwrap();
     std::thread::sleep(DELAY);
     writeln!(
         weird,
         "{}",
-        r#"show ("Done" @ProgressBar{total 1, extra 2, children (@Other{} "Text")})"#
+        r#"show ("Running 2/5" @ProgressBar{value 2, max 5, children (@Other{} "Progress 2")})"#
     )
     .unwrap();
+    std::thread::sleep(DELAY);
+    writeln!(
+        weird,
+        "{}",
+        r#"show ("Running 3/5" @ProgressBar{value 3, max 5, children (@Other{} "Progress 3")})"#
+    )
+    .unwrap();
+    std::thread::sleep(DELAY);
+    writeln!(
+        weird,
+        "{}",
+        r#"show ("Running 4/5" @ProgressBar{value 4, max 5, children (@Other{} "Progress 4")})"#
+    )
+    .unwrap();
+    std::thread::sleep(DELAY);
+    writeln!(
+        weird,
+        "{}",
+        r#"show ("Running 5/5" @ProgressBar{value 5, max 5, children (@Other{} "Progress 5")})"#
+    )
+    .unwrap();
+    std::thread::sleep(DELAY);
+    writeln!(weird, "{}", r#"show ("Done")"#).unwrap();
 }
