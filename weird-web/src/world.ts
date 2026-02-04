@@ -1,5 +1,5 @@
 import unreachable from "ts-unreachable";
-import { type DidInsertEvent, NodeId } from "./message";
+import { NodeId, type WorldDidChangeEvent } from "./message";
 
 const ROOT_NODE_ID = NodeId.parse("0");
 
@@ -24,8 +24,48 @@ export class World {
     element.appendChild(rootNode.dom);
   }
 
-  handleDidInsertEvent(event: DidInsertEvent) {
-    for (const inserted of event.nodes) {
+  handleWorldDidChangeEvent(event: WorldDidChangeEvent) {
+    for (const removed of event.removed) {
+      const worldNode = this.#nodes[removed];
+      if (worldNode == null) {
+        console.warn(
+          "got WorldDidChange event, but node does not exist",
+          removed,
+        );
+        continue;
+      }
+
+      delete this.#nodes[removed];
+
+      const parentNode =
+        worldNode.parent != null ? this.#nodes[worldNode.parent] : null;
+      switch (parentNode?.type) {
+        case "element": {
+          const childIndex = parentNode.children.indexOf(removed);
+          if (childIndex !== -1) {
+            parentNode.children.splice(childIndex, 1);
+            parentNode.dom.removeChild(worldNode.dom);
+          } else {
+            console.warn("node not found within parent element", {
+              worldNode,
+              parentNode,
+            });
+          }
+          break;
+        }
+        case "text":
+          console.warn("invalid parent node type", { worldNode, parentNode });
+          break;
+        case null:
+        case undefined:
+          console.warn("parent node not found for node", worldNode);
+          break;
+        default:
+          return unreachable(parentNode);
+      }
+    }
+
+    for (const inserted of event.inserted) {
       let worldNode: WorldNode;
       if (typeof inserted.node === "string") {
         worldNode = {

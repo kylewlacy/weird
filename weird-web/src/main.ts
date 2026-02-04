@@ -40,8 +40,8 @@ socket.addEventListener("message", (event) => {
 
   if ("event" in message) {
     switch (message.event.$tag) {
-      case "DidInsert":
-        world.handleDidInsertEvent(message.event.$value);
+      case "WorldDidChange":
+        world.handleWorldDidChangeEvent(message.event.$value);
         world.printNodes();
         break;
       default:

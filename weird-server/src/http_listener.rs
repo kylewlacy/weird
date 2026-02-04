@@ -123,13 +123,11 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                 sync_world: SyncWorldRequest { request_id },
             } => {
                 let world = state.world.read().await;
-                let event = world.initial_client_world_change_event();
-                let mut events_rx = world.subscribe_to_world_change_events();
+                let event = world.initial_client_world_did_change_event();
+                let mut events_rx = world.subscribe_to_world_did_change_events();
                 let response = ServerMessage::Event {
                     id: request_id.clone(),
-                    event: ServerEvent::WorldChange(crate::world::WorldChangeEvent::DidInsert(
-                        event,
-                    )),
+                    event: ServerEvent::WorldDidChange(event),
                 };
 
                 let styx = facet_styx::to_string(&response);
@@ -165,7 +163,7 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                         };
                         let response = ServerMessage::Event {
                             id: request_id.clone(),
-                            event: ServerEvent::WorldChange(event),
+                            event: ServerEvent::WorldDidChange(event),
                         };
 
                         let styx = facet_styx::to_string(&response);

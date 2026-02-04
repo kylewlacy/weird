@@ -1,4 +1,4 @@
-use crate::world::{NodeTree, WorldChangeEvent};
+use crate::world::{NodeTree, WorldDidChangeEvent};
 
 #[derive(Debug, facet::Facet)]
 #[repr(u8)]
@@ -28,8 +28,7 @@ pub enum ServerMessage {
 
 #[derive(facet::Facet)]
 #[repr(u8)]
-#[facet(untagged)]
 #[expect(unused)]
 pub enum ServerEvent {
-    WorldChange(WorldChangeEvent),
+    WorldDidChange(WorldDidChangeEvent),
 }

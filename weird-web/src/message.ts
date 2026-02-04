@@ -12,43 +12,26 @@ export type FlatElement = z.infer<typeof FlatElement>;
 export const FlatNode = z.union([z.string(), FlatElement]);
 export type FlatNode = z.infer<typeof FlatNode>;
 
-export const SyncChange = z.discriminatedUnion("$tag", [
-  z.object({
-    $tag: z.literal("DidInsert"),
-    $value: z.object({
-      id: NodeId,
-      parent: NodeId,
-      node: FlatNode,
-    }),
-  }),
-]);
-export type SyncChange = z.infer<typeof SyncChange>;
-
-export const SyncWorldResponse = z.object({
-  requestId: z.string(),
-  changes: SyncChange.array(),
-});
-export type SyncWorldResponse = z.infer<typeof SyncWorldResponse>;
-
-export const DidInsertNode = z.object({
+export const InsertedNode = z.object({
   id: NodeId,
   parent: NodeId,
   node: FlatNode,
 });
-export type DidInsertNode = z.infer<typeof DidInsertNode>;
+export type InsertedNode = z.infer<typeof InsertedNode>;
 
-export const DidInsertEvent = z.object({
-  nodes: DidInsertNode.array(),
+export const WorldDidChangeEvent = z.object({
+  inserted: InsertedNode.array(),
+  removed: NodeId.array(),
 });
-export type DidInsertEvent = z.infer<typeof DidInsertEvent>;
+export type WorldDidChangeEvent = z.infer<typeof WorldDidChangeEvent>;
 
 export const ServerMessage = z.union([
   z.object({
     id: z.string(),
     event: z.discriminatedUnion("$tag", [
       z.object({
-        $tag: z.literal("DidInsert"),
-        $value: DidInsertEvent,
+        $tag: z.literal("WorldDidChange"),
+        $value: WorldDidChangeEvent,
       }),
     ]),
   }),
