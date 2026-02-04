@@ -7,42 +7,42 @@ fn main() {
     let mut weird = UnixStream::connect(Path::new(&runtime_dir).join("weird.sock"))
         .expect("weird.sock not found");
 
-    writeln!(weird, "{}", r#"show ("Starting...")"#).unwrap();
+    writeln!(weird, "{}", r#"render ("Starting...")"#).unwrap();
     std::thread::sleep(DELAY);
     writeln!(
         weird,
         "{}",
-        r#"show ("Running 1/5" @ProgressBar{value 1, max 5, children (@Other{} "Progress 1")})"#
+        r#"render ("Running 1/5" @ProgressBar{value 1, max 5, children (@Other{} "Progress 1")})"#
     )
     .unwrap();
     std::thread::sleep(DELAY);
     writeln!(
         weird,
         "{}",
-        r#"show ("Running 2/5" @ProgressBar{value 2, max 5, children (@Other{} "Progress 2")})"#
+        r#"render ("Running 2/5" @ProgressBar{value 2, max 5, children (@Other{} "Progress 2")})"#
     )
     .unwrap();
     std::thread::sleep(DELAY);
     writeln!(
         weird,
         "{}",
-        r#"show ("Running 3/5" @ProgressBar{value 3, max 5, children (@Other{} "Progress 3")})"#
+        r#"render ("Running 3/5" @ProgressBar{value 3, max 5, children (@Other{} "Progress 3")})"#
     )
     .unwrap();
     std::thread::sleep(DELAY);
     writeln!(
         weird,
         "{}",
-        r#"show ("Running 4/5" @ProgressBar{value 4, max 5, children (@Other{} "Progress 4")})"#
+        r#"render ("Running 4/5" @ProgressBar{value 4, max 5, children (@Other{} "Progress 4")})"#
     )
     .unwrap();
     std::thread::sleep(DELAY);
     writeln!(
         weird,
         "{}",
-        r#"show ("Running 5/5" @ProgressBar{value 5, max 5, children (@Other{} "Progress 5")})"#
+        r#"render ("Running 5/5" @ProgressBar{value 5, max 5, children (@Other{} "Progress 5")})"#
     )
     .unwrap();
     std::thread::sleep(DELAY);
-    writeln!(weird, "{}", r#"show ("Done")"#).unwrap();
+    writeln!(weird, "{}", r#"render ("Done")"#).unwrap();
 }

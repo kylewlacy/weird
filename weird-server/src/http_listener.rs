@@ -185,7 +185,7 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                     }
                 });
             }
-            ClientMessage::Show { .. } => {
+            ClientMessage::Render { .. } => {
                 tracing::warn!("message not supported for web connections");
                 continue;
             }

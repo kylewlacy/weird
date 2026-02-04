@@ -57,13 +57,13 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
         tracing::info!("got unix client message: {message:?}");
 
         match message {
-            ClientMessage::Show { show } => {
+            ClientMessage::Render { render } => {
                 let mut world = state.world.write().await;
 
                 if let Some(frame_node) = frame_node {
-                    let result = world.set_node_children(frame_node, show);
+                    let result = world.set_node_children(frame_node, render);
                     if let Err(error) = result {
-                        tracing::error!("failed to update node in show message: {error:?}");
+                        tracing::error!("failed to update node in render message: {error:?}");
                         break;
                     }
                 } else {
@@ -72,7 +72,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                             crate::world::ElementTree::new(
                                 "Frame",
                                 crate::world::ElementProperties::default(),
-                                show,
+                                render,
                             )
                             .into(),
                         ),
@@ -83,7 +83,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                         offset: InsertNodeOffset::END,
                     });
                     if let Err(error) = result {
-                        tracing::error!("failed to insert node in show message: {error:?}");
+                        tracing::error!("failed to insert node in render message: {error:?}");
                         break;
                     }
                 };
