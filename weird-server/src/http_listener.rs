@@ -35,15 +35,38 @@ async fn ws_endpoint_handler(
 async fn ws_handler(state: AppState, socket: ws::WebSocket) {
     tracing::info!("web client connected");
 
+    // This oneshot channel will close when dropped, which will signal
+    // to the sending side to exit
+    let (_disconnect_tx, mut disconnect_rx) =
+        tokio::sync::oneshot::channel::<std::convert::Infallible>();
+
+    // Split the socket into a sending side and receiving side. The receiving
+    // side is handled like normal in a loop, while the sending side uses
+    // an MPSC queue in a separate Tokio task, so we can send messages
+    // asynchronously and concurrently (e.g. subscribed events)
     let (socket_tx, mut socket_rx) = {
         let (mut socket_tx, socket_rx) = socket.split();
-        let (send_channel_tx, mut send_channel_rx) = tokio::sync::mpsc::channel(10);
+        let (send_channel_tx, mut send_channel_rx) = tokio::sync::mpsc::channel(1);
 
         tokio::spawn(async move {
-            while let Some(message) = send_channel_rx.recv().await {
+            loop {
+                let message = tokio::select! {
+                    message = send_channel_rx.recv() => {
+                        let Some(message) = message else {
+                            break;
+                        };
+                        message
+                    }
+                    _ = &mut disconnect_rx => {
+                        // Socket disconnected
+                        break;
+                    }
+                };
+
                 let result = socket_tx.send(message).await;
-                if let Err(error) = result {
-                    tracing::warn!("socket closed before queued message was sent: {error}");
+                if result.is_err() {
+                    // Failed to send message (socket probably disconnected)
+                    break;
                 }
             }
         });
