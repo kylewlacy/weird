@@ -57,16 +57,19 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
         match message {
             Message::Show { show } => {
                 let mut world = state.world.write().await;
-                let node = world.create_node(show);
-                let _ = world
-                    .insert_node(InsertNode {
-                        parent: ROOT_NODE_ID,
-                        child: node,
-                        offset: InsertNodeOffset::END,
-                    })
-                    .inspect_err(|error| {
-                        tracing::warn!("failed to insert node in show message: {error:?}");
-                    });
+
+                for node in show {
+                    let node = world.create_node(node);
+                    let _ = world
+                        .insert_node(InsertNode {
+                            parent: ROOT_NODE_ID,
+                            child: node,
+                            offset: InsertNodeOffset::END,
+                        })
+                        .inspect_err(|error| {
+                            tracing::warn!("failed to insert node in show message: {error:?}");
+                        });
+                }
             }
             Message::SyncWorld { .. } => {
                 tracing::warn!("message not supported for Unix connections");

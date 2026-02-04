@@ -5,11 +5,10 @@ fn main() {
     let mut weird = UnixStream::connect(Path::new(&runtime_dir).join("weird.sock"))
         .expect("weird.sock not found");
 
-    writeln!(weird, "show \"Hello world!\"").unwrap();
     writeln!(
         weird,
         "{}",
-        r#"show @ProgressBar{total 1, extra 2, children (@Other{} "Text")}"#
+        r#"show ( "Hello world!" @ProgressBar{total 1, extra 2, children (@Other{} "Text")} )"#
     )
     .unwrap();
 }

@@ -8,7 +8,7 @@ pub enum Message {
     SyncWorld { sync_world: SyncWorldRequest },
 
     #[facet(rename_all = "camelCase")]
-    Show { show: NodeTree },
+    Show { show: Vec<NodeTree> },
 }
 
 #[derive(Debug, facet::Facet)]
