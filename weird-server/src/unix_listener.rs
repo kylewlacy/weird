@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::{io::AsyncBufReadExt as _, sync::RwLock};
 
 use crate::{
-    message::Message,
+    message::ClientMessage,
     world::{InsertNode, InsertNodeOffset, ROOT_NODE_ID, World},
 };
 
@@ -43,7 +43,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
             }
         };
 
-        let message = facet_styx::from_str::<Message>(&line);
+        let message = facet_styx::from_str::<ClientMessage>(&line);
         let message = match message {
             Ok(message) => message,
             Err(error) => {
@@ -55,7 +55,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
         tracing::info!("got unix client message: {message:?}");
 
         match message {
-            Message::Show { show } => {
+            ClientMessage::Show { show } => {
                 let mut world = state.world.write().await;
 
                 for node in show {
@@ -71,7 +71,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                         });
                 }
             }
-            Message::SyncWorld { .. } => {
+            ClientMessage::SyncWorld { .. } => {
                 tracing::warn!("message not supported for Unix connections");
                 continue;
             }

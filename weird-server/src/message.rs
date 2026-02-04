@@ -3,7 +3,7 @@ use crate::world::{NodeTree, WorldChangeEvent};
 #[derive(Debug, facet::Facet)]
 #[repr(u8)]
 #[facet(untagged)]
-pub enum Message {
+pub enum ClientMessage {
     #[facet(rename_all = "camelCase")]
     SyncWorld { sync_world: SyncWorldRequest },
 

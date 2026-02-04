@@ -8,7 +8,7 @@ use futures_util::{SinkExt as _, StreamExt as _};
 use tokio::sync::RwLock;
 
 use crate::{
-    message::{Message, ServerEvent, ServerMessage, SyncWorldRequest},
+    message::{ClientMessage, ServerEvent, ServerMessage, SyncWorldRequest},
     world::World,
 };
 
@@ -107,7 +107,7 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
             }
         };
 
-        let message = facet_styx::from_str::<Message>(message);
+        let message = facet_styx::from_str::<ClientMessage>(message);
         let message = match message {
             Ok(message) => message,
             Err(error) => {
@@ -119,7 +119,7 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
         tracing::info!("got web client message: {message:?}");
 
         match message {
-            Message::SyncWorld {
+            ClientMessage::SyncWorld {
                 sync_world: SyncWorldRequest { request_id },
             } => {
                 let world = state.world.read().await;
@@ -187,7 +187,7 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                     }
                 });
             }
-            Message::Show { .. } => {
+            ClientMessage::Show { .. } => {
                 tracing::warn!("message not supported for web connections");
                 continue;
             }
