@@ -142,7 +142,6 @@ impl World {
         Ok(insert_index)
     }
 
-    #[expect(unused)]
     pub fn remove_node(&mut self, node_id: NodeId) -> Result<NodeId, RemoveNodeFailed> {
         if !self.nodes.contains_key(&node_id) {
             return Err(RemoveNodeFailed::NodeNotFound);
@@ -173,7 +172,23 @@ impl World {
             });
         parent_children.remove(child_pos);
 
+        let num_receivers = self.world_did_change_events.receiver_count();
+        if num_receivers != 0 {
+            tracing::debug!(num_receivers, "broadcasting change event");
+            let mut event = WorldDidChangeEvent::default();
+
+            event.removed.push(node_id);
+
+            let _ = self.world_did_change_events.send(event);
+        } else {
+            tracing::debug!("no listeners, skipping change event");
+        }
+
         Ok(*parent)
+    }
+
+    pub fn node_children(&self, node_id: NodeId) -> Option<&[NodeId]> {
+        self.children.get(&node_id).map(|children| &**children)
     }
 
     pub fn initial_client_world_did_change_event(&self) -> WorldDidChangeEvent {
@@ -335,6 +350,7 @@ pub enum InsertNodeFailed {
     InvalidParentNodeType,
 }
 
+#[derive(Debug)]
 pub enum RemoveNodeFailed {
     NodeNotFound,
     NoParentNode,

@@ -83,6 +83,13 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                     *frame_node.insert(node)
                 };
 
+                let frame_children = world.node_children(frame_node).unwrap_or_default().to_vec();
+                for child in frame_children {
+                    let _ = world.remove_node(child).inspect_err(|error| {
+                        tracing::warn!("failed to remove node in show message: {error:?}");
+                    });
+                }
+
                 for node in show {
                     let node = world.create_node(node);
                     let _ = world
