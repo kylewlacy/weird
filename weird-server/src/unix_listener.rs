@@ -27,6 +27,8 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
 
     let (rx, _tx) = conn.split();
 
+    let mut frame_node = None;
+
     let rx = tokio::io::BufReader::new(rx);
     let mut rx_lines = rx.lines();
     loop {
@@ -58,11 +60,34 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
             ClientMessage::Show { show } => {
                 let mut world = state.world.write().await;
 
+                let frame_node = if let Some(frame_node) = frame_node {
+                    frame_node
+                } else {
+                    let node = world.create_node(
+                        crate::world::ElementTree::new(
+                            "Frame",
+                            crate::world::ElementProperties::default(),
+                            vec![],
+                        )
+                        .into(),
+                    );
+                    let result = world.insert_node(InsertNode {
+                        parent: ROOT_NODE_ID,
+                        child: node,
+                        offset: InsertNodeOffset::END,
+                    });
+                    if let Err(error) = result {
+                        tracing::error!("failed to insert node in show message: {error:?}");
+                        break;
+                    }
+                    *frame_node.insert(node)
+                };
+
                 for node in show {
                     let node = world.create_node(node);
                     let _ = world
                         .insert_node(InsertNode {
-                            parent: ROOT_NODE_ID,
+                            parent: frame_node,
                             child: node,
                             offset: InsertNodeOffset::END,
                         })

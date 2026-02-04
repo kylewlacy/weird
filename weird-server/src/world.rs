@@ -231,6 +231,15 @@ pub struct NodeTree {
     data: NodeTreeData,
 }
 
+impl Into<NodeTree> for ElementTree {
+    fn into(self) -> NodeTree {
+        NodeTree {
+            class: self.class,
+            data: NodeTreeData::Element(self.data),
+        }
+    }
+}
+
 #[derive(Debug, facet::Facet)]
 #[repr(u8)]
 #[facet(untagged)]
@@ -246,6 +255,22 @@ pub struct ElementTree {
     class: Option<String>,
     #[facet(flatten)]
     data: ElementTreeData,
+}
+
+impl ElementTree {
+    pub fn new(
+        class: impl Into<String>,
+        properties: ElementProperties,
+        children: Vec<NodeTree>,
+    ) -> Self {
+        Self {
+            class: Some(class.into()),
+            data: ElementTreeData {
+                children,
+                properties,
+            },
+        }
+    }
 }
 
 #[derive(Debug, facet::Facet)]
