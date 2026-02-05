@@ -13,7 +13,13 @@ export const Window = defineElement(
 
       const windowTitlebar = h(
         "div",
-        { style: { borderBottom: "1px solid black" } },
+        {
+          style: {
+            borderBottom: "1px solid black",
+            touchAction: "none",
+            userSelect: "none",
+          },
+        },
         "Window",
       );
       const windowEl = h(
@@ -35,24 +41,27 @@ export const Window = defineElement(
         if (pointerMoveState == null) {
           return;
         }
-        const parentRect = windowEl.offsetParent?.getBoundingClientRect();
         const windowLeft =
-          event.clientX - (parentRect?.left ?? 0) - pointerMoveState.offsetX;
+          event.clientX - windowEl.offsetLeft - pointerMoveState.offsetX;
         const windowTop =
-          event.clientY - (parentRect?.top ?? 0) - pointerMoveState.offsetY;
+          event.clientY - windowEl.offsetTop - pointerMoveState.offsetY;
 
         windowEl.style.transform = `translateX(${windowLeft}px) translateY(${windowTop}px)`;
       };
 
       windowTitlebar.addEventListener("pointerdown", (event) => {
-        windowTitlebar.setPointerCapture(event.pointerId);
-      });
-      windowTitlebar.addEventListener("gotpointercapture", (event) => {
         const windowRect = windowEl.getBoundingClientRect();
         pointerMoveState = {
           offsetX: event.clientX - windowRect.left,
           offsetY: event.clientY - windowRect.top,
         };
+
+        windowTitlebar.setPointerCapture(event.pointerId);
+      });
+      windowTitlebar.addEventListener("pointerup", (event) => {
+        windowTitlebar.releasePointerCapture(event.pointerId);
+      });
+      windowTitlebar.addEventListener("gotpointercapture", () => {
         windowTitlebar.addEventListener("pointermove", onPointerMove);
       });
       windowTitlebar.addEventListener("lostpointercapture", () => {
