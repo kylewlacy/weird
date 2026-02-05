@@ -12,7 +12,10 @@ if (appElement == null) {
 const world = new World();
 world.mount(appElement);
 
-const socket = new WebSocket("http://localhost:2552/ws");
+const url = new URL(window.location.href);
+url.port = "2552";
+url.pathname = "/ws";
+const socket = new WebSocket(url);
 
 socket.addEventListener("open", (_event) => {
   console.info("[WebSocket] opened");
