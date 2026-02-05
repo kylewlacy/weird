@@ -1,6 +1,6 @@
 import unreachable from "ts-unreachable";
 import { NodeId, type WorldDidChangeEvent } from "./message.ts";
-import { Frame } from "./elements/Frame.ts";
+import { Window } from "./elements/Window.ts";
 
 const ROOT_NODE_ID = NodeId.parse("0");
 
@@ -170,7 +170,7 @@ const ELEMENTS = {
   Other: {
     name: "span",
   },
-  Frame,
+  Window,
 } as const satisfies Record<string, WorldElementClass>;
 
 function createDomElement(className: string): HTMLElement {
