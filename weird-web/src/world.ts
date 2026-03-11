@@ -1,5 +1,5 @@
 import unreachable from "ts-unreachable";
-import { NodeId, type WorldDidChangeEvent } from "./message.ts";
+import { NodeId, type WorldDidChangeEvent } from "./protocol/types.ts";
 import { Window } from "./elements/Window.ts";
 
 const ROOT_NODE_ID = NodeId.parse("0");
@@ -96,10 +96,10 @@ export class World {
         worldNode = {
           type: "element",
           parent: inserted.parent,
-          class: inserted.node.$tag,
-          attributes: inserted.node.$value,
+          class: inserted.node.tag,
+          attributes: inserted.node.attributes,
           children: [],
-          dom: createDomElement(inserted.node.$tag),
+          dom: createDomElement(inserted.node.tag),
         };
       }
       if (this.#nodes[inserted.id] != null) {

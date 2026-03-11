@@ -1,8 +1,6 @@
-import { parseStyx } from "./styx.ts";
-import { ServerMessage } from "./message.ts";
+import { WeirdClient } from "./protocol/client.ts";
 import "./styles/main.css";
 import { World } from "./world.ts";
-import unreachable from "ts-unreachable";
 
 const appElement = document.getElementById("app");
 if (appElement == null) {
@@ -16,47 +14,25 @@ const url = new URL(window.location.href);
 url.port = "2552";
 url.pathname = "/ws";
 const socket = new WebSocket(url);
+const client = new WeirdClient(socket);
 
-socket.addEventListener("open", (_event) => {
+socket.addEventListener("open", () => {
   console.info("[WebSocket] opened");
-  socket.send(`syncWorld {requestId "syncWorld"}`);
+
+  client.subscribe({
+    event: "syncWorld",
+    params: {},
+    on: (event) => {
+      world.handleWorldDidChangeEvent(event);
+      world.printNodes();
+    },
+  });
 });
 
-socket.addEventListener("message", (event) => {
-  if (typeof event.data !== "string") {
-    console.warn("returned invalid type from WebSocket event, ignoring", {
-      message: event.data,
-    });
-    return;
-  }
-
-  let message: ServerMessage;
-  try {
-    message = parseStyx(event.data, ServerMessage);
-  } catch (error) {
-    console.warn("failed to parse WebSocket message", {
-      message: event.data,
-      error,
-    });
-    return;
-  }
-
-  if ("event" in message) {
-    switch (message.event.$tag) {
-      case "WorldDidChange":
-        world.handleWorldDidChangeEvent(message.event.$value);
-        world.printNodes();
-        break;
-      default:
-        return unreachable(message.event.$tag);
-    }
-  } else {
-    return unreachable(message);
-  }
-
-  console.info("[WebSocket] parsed", message);
+socket.addEventListener("close", (event) => {
+  console.info("[WebSocket] closed", event);
 });
 
 socket.addEventListener("error", (event) => {
-  console.warn("WebSocket error:", event);
+  console.info("[WebSocket] error", event);
 });

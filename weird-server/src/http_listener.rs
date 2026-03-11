@@ -8,7 +8,7 @@ use futures_util::{SinkExt as _, StreamExt as _};
 use tokio::sync::RwLock;
 
 use crate::{
-    message::{ClientMessage, ServerEvent, ServerMessage, SyncWorldRequest},
+    protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, Request, ServerEvent},
     world::World,
 };
 
@@ -73,8 +73,8 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
         (send_channel_tx, socket_rx)
     };
 
-    while let Some(message) = socket_rx.next().await {
-        let message = match message {
+    while let Some(request) = socket_rx.next().await {
+        let request = match request {
             Err(error) => {
                 tracing::warn!("received web client error: {error}");
                 break;
@@ -107,40 +107,56 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
             }
         };
 
-        let message = facet_styx::from_str::<ClientMessage>(message);
-        let message = match message {
-            Ok(message) => message,
+        let request = serde_json::from_str::<JsonRpcRequest<Request>>(request);
+        let request = match request {
+            Ok(request) => request,
             Err(error) => {
-                tracing::warn!("invalid message from web client: {error}");
+                tracing::warn!("invalid JSON RPC request from web client: {error}");
+
+                let response = JsonRpcResponse::<()>::error(
+                    None,
+                    JsonRpcError {
+                        code: 1,
+                        message: format!("received invalid JSON RPC request: {error}"),
+                        data: serde_json::Value::Null,
+                    },
+                );
+                let json = serde_json::to_string(&response)
+                    .expect("failed to serialize JSON RPC response");
+
+                let result = socket_tx.send(ws::Message::Text(json.into())).await;
+                match result {
+                    Ok(()) => {}
+                    Err(error) => {
+                        tracing::warn!("failed to send web response: {error}");
+                    }
+                }
                 break;
             }
         };
 
-        tracing::info!("got web client message: {message:?}");
+        tracing::info!("got web JSON RPC request: {request:?}");
 
-        match message {
-            ClientMessage::SyncWorld {
-                sync_world: SyncWorldRequest { request_id },
-            } => {
+        match request.body {
+            Request::SyncWorld {} => {
                 let world = state.world.read().await;
                 let event = world.initial_client_world_did_change_event();
                 let mut events_rx = world.subscribe_to_world_did_change_events();
-                let response = ServerMessage::Event {
-                    id: request_id.clone(),
-                    event: ServerEvent::WorldDidChange(event),
-                };
+                let response =
+                    JsonRpcResponse::result(request.id.clone(), ServerEvent::WorldDidChange(event));
 
-                let styx = facet_styx::to_string(&response);
-                let styx = match styx {
-                    Ok(styx) => styx,
+                let json = serde_json::to_string(&response);
+                let json = match json {
+                    Ok(json) => json,
                     Err(error) => {
-                        tracing::warn!("failed to serialize message: {error}");
-                        continue;
+                        tracing::warn!("failed to serialize response: {error}");
+                        break;
                     }
                 };
+
                 drop(world);
 
-                let result = socket_tx.send(ws::Message::text(styx)).await;
+                let result = socket_tx.send(ws::Message::text(json)).await;
                 match result {
                     Ok(()) => {}
                     Err(error) => {
@@ -161,31 +177,31 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                                 break;
                             }
                         };
-                        let response = ServerMessage::Event {
-                            id: request_id.clone(),
-                            event: ServerEvent::WorldDidChange(event),
-                        };
+                        let response = JsonRpcResponse::result(
+                            request.id.clone(),
+                            ServerEvent::WorldDidChange(event),
+                        );
 
-                        let styx = facet_styx::to_string(&response);
-                        let styx = match styx {
-                            Ok(styx) => styx,
+                        let json = serde_json::to_string(&response);
+                        let json = match json {
+                            Ok(json) => json,
                             Err(error) => {
                                 tracing::warn!("failed to serialize message: {error}");
                                 break;
                             }
                         };
 
-                        let result = socket_tx.send(ws::Message::text(styx)).await;
+                        let result = socket_tx.send(ws::Message::text(json)).await;
                         match result {
                             Ok(()) => {}
                             Err(error) => {
-                                tracing::warn!("failed to send web response: {error}");
+                                tracing::warn!("failed to send web JSON RPC response: {error}");
                             }
                         }
                     }
                 });
             }
-            ClientMessage::Render { .. } => {
+            Request::Render { .. } => {
                 tracing::warn!("message not supported for web connections");
                 continue;
             }

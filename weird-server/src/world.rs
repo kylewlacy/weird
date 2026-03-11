@@ -12,10 +12,7 @@ pub struct World {
 
 impl World {
     pub fn new() -> Self {
-        let root_node = Node::Element(Element {
-            class: Some("World".to_string()),
-            properties: ElementProperties::default(),
-        });
+        let root_node = Node::Element(Element::new("World"));
 
         Self {
             nodes: BTreeMap::from_iter([(ROOT_NODE_ID, Arc::new(root_node))]),
@@ -39,20 +36,15 @@ impl World {
             let id = next_id;
             next_id = NodeId(next_id.0 + 1);
 
-            match node_tree.data {
-                NodeTreeData::Text(text) => {
+            match node_tree {
+                NodeTree::Text(text) => {
                     self.nodes.insert(id, Arc::new(Node::Text(text)));
                 }
-                NodeTreeData::Element(element) => {
+                NodeTree::Element(element) => {
                     queue.extend(element.children.into_iter().map(|child| (child, Some(id))));
 
-                    self.nodes.insert(
-                        id,
-                        Arc::new(Node::Element(Element {
-                            class: node_tree.class,
-                            properties: element.properties,
-                        })),
-                    );
+                    self.nodes
+                        .insert(id, Arc::new(Node::Element(element.element)));
                     self.children.insert(id, vec![]);
                 }
             };
@@ -288,92 +280,87 @@ impl World {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, facet::Facet)]
-#[facet(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NodeId(u64);
+
+impl serde::Serialize for NodeId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.0.to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for NodeId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s: &str = serde::Deserialize::deserialize(deserializer)?;
+        let id = s.parse().map_err(serde::de::Error::custom)?;
+        Ok(Self(id))
+    }
+}
 
 pub const ROOT_NODE_ID: NodeId = NodeId(0);
 
-#[derive(Debug, facet::Facet)]
-#[facet(metadata_container)]
-pub struct NodeTree {
-    #[facet(metadata = "tag")]
-    class: Option<String>,
-    data: NodeTreeData,
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum NodeTree {
+    Text(String),
+    Element(ElementTree),
 }
 
 impl Into<NodeTree> for ElementTree {
     fn into(self) -> NodeTree {
-        NodeTree {
-            class: self.class,
-            data: NodeTreeData::Element(self.data),
-        }
+        NodeTree::Element(self)
     }
 }
 
-#[derive(Debug, facet::Facet)]
-#[repr(u8)]
-#[facet(untagged)]
-pub enum NodeTreeData {
-    Text(String),
-    Element(ElementTreeData),
-}
-
-#[derive(Debug, facet::Facet)]
-#[facet(metadata_container)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ElementTree {
-    #[facet(metadata = "tag")]
-    class: Option<String>,
-    #[facet(flatten)]
-    data: ElementTreeData,
+    #[serde(default)]
+    children: Vec<NodeTree>,
+    #[serde(flatten)]
+    element: Element,
 }
 
 impl ElementTree {
-    pub fn new(
-        class: impl Into<String>,
-        properties: ElementProperties,
-        children: Vec<NodeTree>,
-    ) -> Self {
+    pub fn new(tag: impl Into<String>) -> Self {
         Self {
-            class: Some(class.into()),
-            data: ElementTreeData {
-                children,
-                properties,
-            },
+            element: Element::new(tag),
+            children: vec![],
         }
+    }
+
+    pub fn children(mut self, children: impl IntoIterator<Item = NodeTree>) -> Self {
+        self.children.extend(children);
+        self
     }
 }
 
-#[derive(Debug, facet::Facet)]
-#[facet(rename_all = "camelCase")]
-pub struct ElementTreeData {
-    #[facet(default)]
-    children: Vec<NodeTree>,
-    #[facet(flatten)]
-    properties: ElementProperties,
-}
-
-#[derive(Debug, facet::Facet)]
-#[repr(u8)]
-#[facet(untagged)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
 pub enum Node {
-    Text(#[expect(unused)] String),
-    Element(#[expect(unused)] Element),
+    Text(String),
+    Element(Element),
 }
 
-#[derive(Debug, facet::Facet)]
-#[facet(metadata_container)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Element {
-    #[facet(metadata = "tag")]
-    class: Option<String>,
-    properties: ElementProperties,
+    tag: String,
+    #[serde(default)]
+    attributes: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Default, facet::Facet)]
-#[facet(rename_all = "camelCase")]
-pub struct ElementProperties {
-    #[facet(flatten)]
-    attributes: HashMap<String, String>,
+impl Element {
+    pub fn new(tag: impl Into<String>) -> Self {
+        Self {
+            tag: tag.into(),
+            attributes: HashMap::new(),
+        }
+    }
 }
 
 pub struct InsertNode {
@@ -419,15 +406,15 @@ pub enum SetNodeChildrenFailed {
     InvalidNodeType,
 }
 
-#[derive(Default, Clone, facet::Facet)]
-#[facet(rename_all = "camelCase")]
+#[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorldDidChangeEvent {
     inserted: Vec<InsertedNode>,
     removed: Vec<NodeId>,
 }
 
-#[derive(Clone, facet::Facet)]
-#[facet(rename_all = "camelCase")]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InsertedNode {
     id: NodeId,
     parent: NodeId,

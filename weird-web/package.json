@@ -12,7 +12,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@bearcove/styx": "file:../vendor/styx-js",
     "ts-unreachable": "^2.0.0",
     "zod": "^4.3.6"
   },
