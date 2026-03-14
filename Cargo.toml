@@ -1,4 +1,4 @@
 [workspace]
 resolver = "3"
-default-members = ["weird-server"]
-members = ["weird-server", "apps/hello-world"]
+default-members = ["crates/weird-server"]
+members = ["crates/weird-server", "apps/hello-world"]
