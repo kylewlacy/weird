@@ -11,17 +11,6 @@ pub struct World {
 }
 
 impl World {
-    pub fn new() -> Self {
-        let root_node = Node::Element(Element::new("World"));
-
-        Self {
-            nodes: BTreeMap::from_iter([(ROOT_NODE_ID, Arc::new(root_node))]),
-            parents: BTreeMap::new(),
-            children: BTreeMap::from_iter([(ROOT_NODE_ID, vec![])]),
-            world_did_change_events: tokio::sync::broadcast::Sender::new(10),
-        }
-    }
-
     pub fn create_node(&mut self, node: NodeTree) -> NodeId {
         let new_id = self
             .nodes
@@ -279,6 +268,19 @@ impl World {
     }
 }
 
+impl Default for World {
+    fn default() -> Self {
+        let root_node = Node::Element(Element::new("World"));
+
+        Self {
+            nodes: BTreeMap::from_iter([(ROOT_NODE_ID, Arc::new(root_node))]),
+            parents: BTreeMap::new(),
+            children: BTreeMap::from_iter([(ROOT_NODE_ID, vec![])]),
+            world_did_change_events: tokio::sync::broadcast::Sender::new(10),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NodeId(u64);
 
@@ -311,9 +313,9 @@ pub enum NodeTree {
     Element(ElementTree),
 }
 
-impl Into<NodeTree> for ElementTree {
-    fn into(self) -> NodeTree {
-        NodeTree::Element(self)
+impl From<ElementTree> for NodeTree {
+    fn from(value: ElementTree) -> Self {
+        Self::Element(value)
     }
 }
 

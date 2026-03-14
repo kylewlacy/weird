@@ -19,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let world = weird_core::world::World::new();
+    let world = weird_core::world::World::default();
     let world = Arc::new(RwLock::new(world));
 
     let http_app = http_listener::router(http_listener::AppState {

@@ -16,11 +16,9 @@ pub struct AppState {
 }
 
 pub fn router(state: AppState) -> axum::Router {
-    let router = axum::Router::new()
+    axum::Router::new()
         .route("/ws", axum::routing::any(ws_endpoint_handler))
-        .with_state(state);
-
-    router
+        .with_state(state)
 }
 
 async fn ws_endpoint_handler(
@@ -94,7 +92,7 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
             }
             Ok(ws::Message::Text(ref text)) => text,
             Ok(ws::Message::Binary(ref bytes)) => {
-                let text = str::from_utf8(&bytes);
+                let text = str::from_utf8(bytes);
                 match text {
                     Ok(text) => text,
                     Err(error) => {
