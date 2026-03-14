@@ -911,6 +911,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "weird-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "weird-server"
 version = "0.1.0"
 dependencies = [
@@ -922,6 +932,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "weird-core",
 ]
 
 [[package]]

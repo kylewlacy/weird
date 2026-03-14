@@ -6,11 +6,9 @@ use axum::{
 };
 use futures_util::{SinkExt as _, StreamExt as _};
 use tokio::sync::RwLock;
+use weird_core::world::World;
 
-use crate::{
-    protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, Request, ServerEvent},
-    world::World,
-};
+use weird_core::proto::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, Request, ServerEvent};
 
 #[derive(Clone)]
 pub struct AppState {

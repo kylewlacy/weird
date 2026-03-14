@@ -5,13 +5,12 @@ use tokio::{io::AsyncWriteExt as _, sync::RwLock};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 mod http_listener;
-mod protocol;
 mod unix_listener;
-mod world;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    const DEFAULT_TRACING_DIRECTIVE: &str = concat!(env!("CARGO_CRATE_NAME"), "=info,warn");
+    const DEFAULT_TRACING_DIRECTIVE: &str =
+        concat!(env!("CARGO_CRATE_NAME"), "=info,weird_core=info,warn");
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .with(
@@ -20,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let world = world::World::new();
+    let world = weird_core::world::World::new();
     let world = Arc::new(RwLock::new(world));
 
     let http_app = http_listener::router(http_listener::AppState {

@@ -1,4 +1,10 @@
 [workspace]
 resolver = "3"
 default-members = ["crates/weird-server"]
-members = ["crates/weird-server", "apps/hello-world"]
+members = ["apps/hello-world", "crates/weird-core", "crates/weird-server"]
+
+[workspace.dependencies]
+tokio = { version = "1.49.0", features = ["full"] }
+tracing = "0.1.44"
+serde = { version = "1.0.228", features = ["derive", "rc"] }
+serde_json = "1.0.149"

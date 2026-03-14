@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use tokio::{io::AsyncBufReadExt as _, sync::RwLock};
 
-use crate::{
-    protocol::{JsonRpcRequest, Request},
+use weird_core::{
+    proto::{JsonRpcRequest, Request},
     world::{InsertNode, InsertNodeOffset, ROOT_NODE_ID, World},
 };
 
@@ -69,7 +69,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                 } else {
                     let window_node = window_node.insert(
                         world.create_node(
-                            crate::world::ElementTree::new("Window")
+                            weird_core::world::ElementTree::new("Window")
                                 .children(render)
                                 .into(),
                         ),

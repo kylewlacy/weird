@@ -129,7 +129,6 @@ impl World {
         Ok(insert_index)
     }
 
-    #[expect(unused)]
     pub fn remove_node(&mut self, node_id: NodeId) -> Result<NodeId, RemoveNodeFailed> {
         if !self.nodes.contains_key(&node_id) {
             return Err(RemoveNodeFailed::NodeNotFound);
@@ -376,7 +375,6 @@ pub enum InsertNodeOffset {
 }
 
 impl InsertNodeOffset {
-    #[expect(unused)]
     pub const BEGINNING: Self = InsertNodeOffset::FromStart(0);
     pub const END: Self = InsertNodeOffset::FromEnd(0);
 }
@@ -386,9 +384,7 @@ pub enum InsertNodeFailed {
     NodeNotFound,
     ParentNotFound,
     OffsetOutOfBounds {
-        #[expect(unused)]
         offset: InsertNodeOffset,
-        #[expect(unused)]
         num_children: usize,
     },
     InvalidParentNodeType,
