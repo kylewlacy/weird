@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
-use tokio::{io::AsyncBufReadExt as _, sync::RwLock};
+use tokio::{
+    io::{AsyncBufReadExt as _, AsyncWriteExt as _},
+    sync::RwLock,
+};
 
 use weird_core::{
-    proto::{JsonRpcRequest, Request},
+    proto::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, Request, Response},
     world::{InsertNode, InsertNodeOffset, ROOT_NODE_ID, World},
 };
 
@@ -25,7 +28,7 @@ pub async fn serve_unix_socket(
 async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> anyhow::Result<()> {
     tracing::info!("unix client connected");
 
-    let (rx, _tx) = conn.split();
+    let (rx, mut tx) = conn.split();
 
     let mut window_node = None;
 
@@ -60,12 +63,20 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
             Request::Render(render) => {
                 let mut world = state.world.write().await;
 
-                if let Some(window_node) = window_node {
+                let response = if let Some(window_node) = window_node {
                     let result = world.set_node_children(window_node, render);
-                    if let Err(error) = result {
-                        tracing::error!("failed to update node in render message: {error:?}");
-                        break;
-                    }
+                    result.map_or_else(
+                        |error| {
+                            Err(JsonRpcError {
+                                code: 1,
+                                message: format!(
+                                    "failed to update node in render request: {error:#?}"
+                                ),
+                                data: serde_json::Value::Null,
+                            })
+                        },
+                        |()| Ok(Response::Empty),
+                    )
                 } else {
                     let window_node = window_node.insert(
                         world.create_node(
@@ -79,10 +90,26 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                         child: *window_node,
                         offset: InsertNodeOffset::END,
                     });
-                    if let Err(error) = result {
-                        tracing::error!("failed to insert node in render request: {error:?}");
-                        break;
-                    }
+                    result.map_or_else(
+                        |error| {
+                            Err(JsonRpcError {
+                                code: 1,
+                                message: format!(
+                                    "failed to insert node in render request: {error:?}"
+                                ),
+                                data: serde_json::Value::Null,
+                            })
+                        },
+                        |_| Ok(Response::Empty),
+                    )
+                };
+                let response = JsonRpcResponse::new(request.id, response);
+                let mut response_json = serde_json::to_string(&response)?;
+                response_json.push('\n');
+
+                let result = tx.write_all(response_json.as_bytes()).await;
+                if let Err(error) = result {
+                    tracing::warn!("failed to write response to Unix connection: {error:?}");
                 };
             }
             Request::SyncWorld { .. } => {

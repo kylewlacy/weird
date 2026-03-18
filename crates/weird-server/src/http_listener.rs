@@ -8,7 +8,7 @@ use futures_util::{SinkExt as _, StreamExt as _};
 use tokio::sync::RwLock;
 use weird_core::world::World;
 
-use weird_core::proto::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, Request, ServerEvent};
+use weird_core::proto::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, Request, Response};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -139,7 +139,7 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                 let event = world.initial_client_world_did_change_event();
                 let mut events_rx = world.subscribe_to_world_did_change_events();
                 let response =
-                    JsonRpcResponse::result(request.id.clone(), ServerEvent::WorldDidChange(event));
+                    JsonRpcResponse::result(request.id.clone(), Response::WorldDidChange(event));
 
                 let json = serde_json::to_string(&response);
                 let json = match json {
@@ -175,7 +175,7 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                         };
                         let response = JsonRpcResponse::result(
                             request.id.clone(),
-                            ServerEvent::WorldDidChange(event),
+                            Response::WorldDidChange(event),
                         );
 
                         let json = serde_json::to_string(&response);

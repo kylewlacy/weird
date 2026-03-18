@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 default-members = ["crates/weird-server"]
-members = ["apps/hello-world", "crates/weird-core", "crates/weird-server"]
+members = ["apps/hello-world", "crates/weird-client", "crates/weird-core", "crates/weird-server"]
 
 [workspace.dependencies]
 tokio = { version = "1.49.0", features = ["full"] }

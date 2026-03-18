@@ -313,6 +313,44 @@ pub enum NodeTree {
     Element(ElementTree),
 }
 
+impl NodeTree {
+    pub fn text(text: impl Into<String>) -> Self {
+        Self::Text(text.into())
+    }
+
+    pub fn element(tag: impl Into<String>) -> Self {
+        Self::Element(ElementTree::new(tag))
+    }
+
+    pub fn children(self, nodes: impl IntoIterator<Item = NodeTree>) -> Self {
+        let Self::Element(element) = self else {
+            panic!("called .children() on non-element node");
+        };
+        Self::Element(element.children(nodes))
+    }
+
+    pub fn child(self, node: NodeTree) -> Self {
+        let Self::Element(element) = self else {
+            panic!("called .child() on non-element node");
+        };
+        Self::Element(element.child(node))
+    }
+
+    pub fn attrs(self, attrs: impl IntoIterator<Item = (String, serde_json::Value)>) -> Self {
+        let Self::Element(element) = self else {
+            panic!("called .attrs() on non-element node");
+        };
+        Self::Element(element.attrs(attrs))
+    }
+
+    pub fn attr(self, name: impl Into<String>, value: impl serde::Serialize) -> Self {
+        let Self::Element(element) = self else {
+            panic!("called .attr() on non-element node");
+        };
+        Self::Element(element.attr(name, value))
+    }
+}
+
 impl From<ElementTree> for NodeTree {
     fn from(value: ElementTree) -> Self {
         Self::Element(value)
@@ -335,8 +373,30 @@ impl ElementTree {
         }
     }
 
-    pub fn children(mut self, children: impl IntoIterator<Item = NodeTree>) -> Self {
-        self.children.extend(children);
+    pub fn children(mut self, nodes: impl IntoIterator<Item = NodeTree>) -> Self {
+        self.children.extend(nodes);
+        self
+    }
+
+    pub fn child(mut self, node: NodeTree) -> Self {
+        self.children.push(node);
+        self
+    }
+
+    pub fn attrs(mut self, attrs: impl IntoIterator<Item = (String, serde_json::Value)>) -> Self {
+        self.element.attributes.extend(attrs);
+        self
+    }
+
+    pub fn attr(mut self, name: impl Into<String>, value: impl serde::Serialize) -> Self {
+        let name = name.into();
+        let value = serde_json::to_value(value).unwrap_or_else(|error| {
+            panic!(
+                "failed to serialize attribute '{name}' for tag '{}': {error}",
+                self.element.tag
+            )
+        });
+        self.element.attributes.insert(name, value);
         self
     }
 }

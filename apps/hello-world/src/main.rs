@@ -1,160 +1,51 @@
-use std::{io::Write as _, os::unix::net::UnixStream, path::Path};
+use weird_client::WeirdClient;
+use weird_core::world::NodeTree;
 
 const DELAY: std::time::Duration = std::time::Duration::from_millis(500);
 
 fn main() {
-    let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").expect("XDG_RUNTIME_DIR not set");
-    let mut weird = UnixStream::connect(Path::new(&runtime_dir).join("weird.sock"))
-        .expect("weird.sock not found");
-
-    writeln!(
-        weird,
-        "{}",
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": "1",
-            "method": "render",
-            "params": ["Starting..."],
-        })
-    )
-    .unwrap();
+    let weird = WeirdClient::connect().unwrap();
+    weird.render([NodeTree::text("Starting...")]);
     std::thread::sleep(DELAY);
-    writeln!(
-        weird,
-        "{}",
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": "2",
-            "method": "render",
-            "params": [
-                "Running 1/5",
-                {
-                    "tag": "ProgressBar",
-                    "attributes": {
-                        "value": 1,
-                        "max": 5,
-                    },
-                    "children": [
-                        {"tag": "Other"},
-                        "Progress 1"
-                    ]
-                }
-            ],
-        })
-    )
-    .unwrap();
+    weird.render([
+        NodeTree::text("Running 1/5"),
+        NodeTree::element("ProgressBar")
+            .attr("value", 1)
+            .attr("max", 5)
+            .children([NodeTree::element("Other"), NodeTree::text("Progress 1")]),
+    ]);
     std::thread::sleep(DELAY);
-    writeln!(
-        weird,
-        "{}",
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": "3",
-            "method": "render",
-            "params": [
-                "Running 2/5",
-                {
-                    "tag": "ProgressBar",
-                    "attributes": {
-                        "value": 2,
-                        "max": 5,
-                    },
-                    "children": [
-                        {"tag": "Other"},
-                        "Progress 2"
-                    ]
-                }
-            ],
-        })
-    )
-    .unwrap();
+    weird.render([
+        NodeTree::text("Running 2/5"),
+        NodeTree::element("ProgressBar")
+            .attr("value", 2)
+            .attr("max", 5)
+            .children([NodeTree::element("Other"), NodeTree::text("Progress 2")]),
+    ]);
     std::thread::sleep(DELAY);
-    writeln!(
-        weird,
-        "{}",
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": "4",
-            "method": "render",
-            "params": [
-                "Running 3/5",
-                {
-                    "tag": "ProgressBar",
-                    "attributes": {
-                        "value": 3,
-                        "max": 5,
-                    },
-                    "children": [
-                        {"tag": "Other"},
-                        "Progress 3"
-                    ]
-                }
-            ],
-        })
-    )
-    .unwrap();
+    weird.render([
+        NodeTree::text("Running 3/5"),
+        NodeTree::element("ProgressBar")
+            .attr("value", 3)
+            .attr("max", 5)
+            .children([NodeTree::element("Other"), NodeTree::text("Progress 3")]),
+    ]);
     std::thread::sleep(DELAY);
-    writeln!(
-        weird,
-        "{}",
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": "5",
-            "method": "render",
-            "params": [
-                "Running 4/5",
-                {
-                    "tag": "ProgressBar",
-                    "attributes": {
-                        "value": 4,
-                        "max": 5,
-                    },
-                    "children": [
-                        {"tag": "Other"},
-                        "Progress 4"
-                    ]
-                }
-            ],
-        })
-    )
-    .unwrap();
+    weird.render([
+        NodeTree::text("Running 4/5"),
+        NodeTree::element("ProgressBar")
+            .attr("value", 4)
+            .attr("max", 5)
+            .children([NodeTree::element("Other"), NodeTree::text("Progress 4")]),
+    ]);
     std::thread::sleep(DELAY);
-    writeln!(
-        weird,
-        "{}",
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": "6",
-            "method": "render",
-            "params": [
-                "Running 5/5",
-                {
-                    "tag": "ProgressBar",
-                    "attributes": {
-                        "value": 5,
-                        "max": 5,
-                    },
-                    "children": [
-                        {"tag": "Other"},
-                        "Progress 5"
-                    ]
-                }
-            ],
-        })
-    )
-    .unwrap();
+    weird.render([
+        NodeTree::text("Running 5/5"),
+        NodeTree::element("ProgressBar")
+            .attr("value", 5)
+            .attr("max", 5)
+            .children([NodeTree::element("Other"), NodeTree::text("Progress 5")]),
+    ]);
     std::thread::sleep(DELAY);
-    writeln!(
-        weird,
-        "{}",
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": "2",
-            "method": "render",
-            "params": [
-                "Done"
-            ],
-        })
-    )
-    .unwrap();
+    weird.render([NodeTree::text("Done")]);
 }

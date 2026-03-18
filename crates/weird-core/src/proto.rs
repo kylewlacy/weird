@@ -9,6 +9,16 @@ pub struct JsonRpcRequest<Body> {
     pub body: Body,
 }
 
+impl<Body> JsonRpcRequest<Body> {
+    pub fn new(id: Option<JsonRpcRequestId>, body: Body) -> Self {
+        Self {
+            _json_rpc: JsonRpcVersion::V2_0,
+            id,
+            body,
+        }
+    }
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum JsonRpcResponse<T> {
@@ -17,6 +27,13 @@ pub enum JsonRpcResponse<T> {
 }
 
 impl<T> JsonRpcResponse<T> {
+    pub fn new(id: Option<JsonRpcRequestId>, result: Result<T, JsonRpcError>) -> Self {
+        match result {
+            Ok(result) => Self::Result(JsonRpcResponseResult::new(id, result)),
+            Err(error) => Self::Error(JsonRpcResponseError::new(id, error)),
+        }
+    }
+
     pub fn result(id: Option<JsonRpcRequestId>, result: T) -> Self {
         Self::Result(JsonRpcResponseResult {
             _json_rpc: JsonRpcVersion::V2_0,
@@ -32,22 +49,49 @@ impl<T> JsonRpcResponse<T> {
             id,
         })
     }
+
+    pub fn id(&self) -> Option<&JsonRpcRequestId> {
+        match self {
+            Self::Result(result) => result.id.as_ref(),
+            Self::Error(error) => error.id.as_ref(),
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct JsonRpcResponseResult<T> {
     #[serde(rename = "jsonrpc")]
     _json_rpc: JsonRpcVersion,
-    result: T,
     id: Option<JsonRpcRequestId>,
+    pub result: T,
+}
+
+impl<T> JsonRpcResponseResult<T> {
+    pub fn new(id: Option<JsonRpcRequestId>, result: T) -> Self {
+        Self {
+            _json_rpc: JsonRpcVersion::V2_0,
+            id,
+            result,
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct JsonRpcResponseError {
     #[serde(rename = "jsonrpc")]
     _json_rpc: JsonRpcVersion,
-    error: JsonRpcError,
     id: Option<JsonRpcRequestId>,
+    pub error: JsonRpcError,
+}
+
+impl JsonRpcResponseError {
+    pub fn new(id: Option<JsonRpcRequestId>, error: JsonRpcError) -> Self {
+        Self {
+            _json_rpc: JsonRpcVersion::V2_0,
+            id,
+            error,
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -63,11 +107,31 @@ pub enum JsonRpcVersion {
     V2_0,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(untagged)]
 pub enum JsonRpcRequestId {
     String(String),
-    Number(f64),
+    Number(i64),
+}
+
+impl From<&str> for JsonRpcRequestId {
+    fn from(value: &str) -> Self {
+        Self::String(value.to_string())
+    }
+}
+
+impl From<String> for JsonRpcRequestId {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+
+impl From<i64> for JsonRpcRequestId {
+    fn from(value: i64) -> Self {
+        Self::Number(value)
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -81,6 +145,7 @@ pub enum Request {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
-pub enum ServerEvent {
+pub enum Response {
+    Empty,
     WorldDidChange(WorldDidChangeEvent),
 }

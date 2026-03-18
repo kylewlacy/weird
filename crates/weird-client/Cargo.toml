@@ -1,0 +1,10 @@
+[package]
+name = "weird-client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crossbeam-channel = "0.5.15"
+serde_json = { workspace = true }
+thiserror = "2.0.18"
+weird-core = { path = "../weird-core" }
