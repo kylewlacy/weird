@@ -1,4 +1,4 @@
-use crate::world::{NodeTree, WorldDidChangeEvent};
+use crate::world::{Node, WorldDidChangeEvent};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct JsonRpcRequest<Body> {
@@ -140,7 +140,7 @@ pub enum Request {
     #[serde(rename_all = "camelCase")]
     SyncWorld {},
 
-    Render(Vec<NodeTree>),
+    Render(Vec<Node>),
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

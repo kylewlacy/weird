@@ -4,14 +4,14 @@ use std::{
 };
 
 pub struct World {
-    nodes: BTreeMap<NodeId, Arc<Node>>,
+    nodes: BTreeMap<NodeId, Arc<FlatNode>>,
     parents: BTreeMap<NodeId, NodeId>,
     children: BTreeMap<NodeId, Vec<NodeId>>,
     world_did_change_events: tokio::sync::broadcast::Sender<WorldDidChangeEvent>,
 }
 
 impl World {
-    pub fn create_node(&mut self, node: NodeTree) -> NodeId {
+    pub fn create_node(&mut self, node: Node) -> NodeId {
         let new_id = self
             .nodes
             .last_key_value()
@@ -19,21 +19,21 @@ impl World {
             .expect("world.nodes is empty");
 
         let mut next_id = new_id;
-        let mut queue: VecDeque<(NodeTree, Option<NodeId>)> = [(node, None)].into_iter().collect();
+        let mut queue: VecDeque<(Node, Option<NodeId>)> = [(node, None)].into_iter().collect();
 
         while let Some((node_tree, parent)) = queue.pop_front() {
             let id = next_id;
             next_id = NodeId(next_id.0 + 1);
 
             match node_tree {
-                NodeTree::Text(text) => {
-                    self.nodes.insert(id, Arc::new(Node::Text(text)));
+                Node::Text(text) => {
+                    self.nodes.insert(id, Arc::new(FlatNode::Text(text)));
                 }
-                NodeTree::Element(element) => {
+                Node::Element(element) => {
                     queue.extend(element.children.into_iter().map(|child| (child, Some(id))));
 
                     self.nodes
-                        .insert(id, Arc::new(Node::Element(element.element)));
+                        .insert(id, Arc::new(FlatNode::Element(element.element)));
                     self.children.insert(id, vec![]);
                 }
             };
@@ -166,7 +166,7 @@ impl World {
     pub fn set_node_children(
         &mut self,
         node_id: NodeId,
-        children: Vec<NodeTree>,
+        children: Vec<Node>,
     ) -> Result<(), SetNodeChildrenFailed> {
         let mut event = WorldDidChangeEvent::default();
 
@@ -270,7 +270,7 @@ impl World {
 
 impl Default for World {
     fn default() -> Self {
-        let root_node = Node::Element(Element::new("World"));
+        let root_node = FlatNode::Element(FlatElement::new("World"));
 
         Self {
             nodes: BTreeMap::from_iter([(ROOT_NODE_ID, Arc::new(root_node))]),
@@ -308,28 +308,28 @@ pub const ROOT_NODE_ID: NodeId = NodeId(0);
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
-pub enum NodeTree {
+pub enum Node {
     Text(String),
-    Element(ElementTree),
+    Element(Element),
 }
 
-impl NodeTree {
+impl Node {
     pub fn text(text: impl Into<String>) -> Self {
         Self::Text(text.into())
     }
 
     pub fn element(tag: impl Into<String>) -> Self {
-        Self::Element(ElementTree::new(tag))
+        Self::Element(Element::new(tag))
     }
 
-    pub fn children(self, nodes: impl IntoIterator<Item = NodeTree>) -> Self {
+    pub fn children(self, nodes: impl IntoIterator<Item = Node>) -> Self {
         let Self::Element(element) = self else {
             panic!("called .children() on non-element node");
         };
         Self::Element(element.children(nodes))
     }
 
-    pub fn child(self, node: NodeTree) -> Self {
+    pub fn child(self, node: Node) -> Self {
         let Self::Element(element) = self else {
             panic!("called .child() on non-element node");
         };
@@ -351,34 +351,34 @@ impl NodeTree {
     }
 }
 
-impl From<ElementTree> for NodeTree {
-    fn from(value: ElementTree) -> Self {
+impl From<Element> for Node {
+    fn from(value: Element) -> Self {
         Self::Element(value)
     }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct ElementTree {
+pub struct Element {
     #[serde(default)]
-    children: Vec<NodeTree>,
+    children: Vec<Node>,
     #[serde(flatten)]
-    element: Element,
+    element: FlatElement,
 }
 
-impl ElementTree {
+impl Element {
     pub fn new(tag: impl Into<String>) -> Self {
         Self {
-            element: Element::new(tag),
+            element: FlatElement::new(tag),
             children: vec![],
         }
     }
 
-    pub fn children(mut self, nodes: impl IntoIterator<Item = NodeTree>) -> Self {
+    pub fn children(mut self, nodes: impl IntoIterator<Item = Node>) -> Self {
         self.children.extend(nodes);
         self
     }
 
-    pub fn child(mut self, node: NodeTree) -> Self {
+    pub fn child(mut self, node: Node) -> Self {
         self.children.push(node);
         self
     }
@@ -403,19 +403,19 @@ impl ElementTree {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
-pub enum Node {
+pub enum FlatNode {
     Text(String),
-    Element(Element),
+    Element(FlatElement),
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct Element {
+pub struct FlatElement {
     tag: String,
     #[serde(default)]
     attributes: HashMap<String, serde_json::Value>,
 }
 
-impl Element {
+impl FlatElement {
     pub fn new(tag: impl Into<String>) -> Self {
         Self {
             tag: tag.into(),
@@ -476,5 +476,5 @@ pub struct WorldDidChangeEvent {
 pub struct InsertedNode {
     id: NodeId,
     parent: NodeId,
-    node: Arc<Node>,
+    node: Arc<FlatNode>,
 }

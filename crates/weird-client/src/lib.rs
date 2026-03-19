@@ -106,14 +106,14 @@ impl WeirdClient {
 
     pub fn try_render(
         &self,
-        nodes: impl IntoIterator<Item = weird_core::world::NodeTree>,
+        nodes: impl IntoIterator<Item = weird_core::world::Node>,
     ) -> Result<(), WeirdClientError> {
         let nodes = nodes.into_iter().collect();
         let _response = self.request(weird_core::proto::Request::Render(nodes))?;
         Ok(())
     }
 
-    pub fn render(&self, nodes: impl IntoIterator<Item = weird_core::world::NodeTree>) {
+    pub fn render(&self, nodes: impl IntoIterator<Item = weird_core::world::Node>) {
         let result = self.try_render(nodes);
         match result {
             Ok(()) => {}
