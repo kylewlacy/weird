@@ -10,7 +10,7 @@ export interface WeirdElement {
   get dom(): Node;
   get domSlot(): Element | null;
 
-  changeAttribute?(key: string, value: unknown, oldValue: unknown): void;
+  updateAttributes(attributes: unknown): void;
 }
 
 interface WeirdElementClassImpl<Attr extends object> {
@@ -21,11 +21,7 @@ interface WeirdElementImpl<Attr extends object> {
   get dom(): Node;
   get domSlot(): Element | null;
 
-  changeAttribute?<K extends keyof Attr>(
-    key: K,
-    value: Attr[K] | undefined,
-    oldValue: Attr[K] | undefined,
-  ): void;
+  updateAttributes?(attributes: Attr, oldAttributes: Attr): void;
 }
 
 export function defineElement<ZAttr extends z.ZodObject>(
@@ -34,6 +30,7 @@ export function defineElement<ZAttr extends z.ZodObject>(
 ): WeirdElementClass {
   return class {
     #el: WeirdElementImpl<z.output<ZAttr>>;
+    #currentAttributes: unknown;
 
     get dom(): Node {
       return this.#el.dom;
@@ -45,32 +42,20 @@ export function defineElement<ZAttr extends z.ZodObject>(
 
     constructor(attributes: unknown) {
       const parsedAttributes = attributeSchema.parse(attributes);
+      this.#currentAttributes = parsedAttributes;
       this.#el = new class_(parsedAttributes);
     }
 
-    changeAttribute?(key: string, value: unknown, oldValue: unknown): void {
-      if (!this.#el.changeAttribute) {
-        return;
+    updateAttributes(attributes: unknown): void {
+      const parsedAttributes = attributeSchema.parse(attributes);
+      if (this.#el.updateAttributes) {
+        this.#el.updateAttributes(
+          parsedAttributes,
+          this.#currentAttributes as z.output<ZAttr>,
+        );
       }
 
-      const parsedKey = attributeSchema.keyof().parse(key);
-      const parsedValue =
-        value === undefined
-          ? undefined
-          : attributeSchema.partial().parse({ [parsedKey]: value })[
-              parsedKey as keyof Attr
-            ];
-      const parsedOldValue =
-        oldValue === undefined
-          ? undefined
-          : attributeSchema.partial().parse({
-              [parsedKey]: oldValue,
-            })[parsedKey as keyof Attr];
-      this.#el.changeAttribute(
-        parsedKey as keyof Attr,
-        parsedValue,
-        parsedOldValue,
-      );
+      this.#currentAttributes = parsedAttributes;
     }
   };
 }

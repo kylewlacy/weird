@@ -24,15 +24,8 @@ export const Window = defineElement(
     #titleNode: Text;
 
     constructor(attrs: WindowAttributes) {
-      const unpadded = attrs.unpadded ?? false;
-
-      this.domSlot = h("div", {
-        style: { padding: unpadded ? "0" : "0.25rem" },
-      });
-
-      this.#titleNode = document.createTextNode(
-        attrs.title ?? DEFAULT_WINDOW_TITLE,
-      );
+      this.domSlot = h("div");
+      this.#titleNode = document.createTextNode("");
       const windowTitlebar = h(
         "div",
         {
@@ -102,19 +95,13 @@ export const Window = defineElement(
         pointerMoveState = undefined;
         windowTitlebar.removeEventListener("pointermove", onPointerMove);
       });
+
+      this.updateAttributes(attrs);
     }
 
-    changeAttribute<K extends keyof WindowAttributes>(
-      key: K,
-      value: WindowAttributes[K] | undefined,
-    ) {
-      switch (key) {
-        case "title": {
-          this.#titleNode.textContent =
-            value != null ? value.toString() : DEFAULT_WINDOW_TITLE;
-          break;
-        }
-      }
+    updateAttributes(attrs: WindowAttributes) {
+      this.#titleNode.textContent = attrs.title ?? DEFAULT_WINDOW_TITLE;
+      this.domSlot.style.padding = (attrs.unpadded ?? false) ? "0" : "0.25rem";
     }
   },
 );
