@@ -10,7 +10,23 @@ body,
 }
 
 #app {
-  background-color: #e4ceb2;
+  --bg-primary: #e4ceb2;
+  --bg-secondary: #695945;
+  --bg-size: 1.1px;
+  background-color: var(--bg-primary);
+  background-image:
+    radial-gradient(
+      var(--bg-secondary) var(--bg-size),
+      transparent var(--bg-size)
+    ),
+    radial-gradient(
+      var(--bg-secondary) var(--bg-size),
+      var(--bg-primary) var(--bg-size)
+    );
+  background-size: 48px 48px;
+  background-position:
+    0 0,
+    24px 24px;
   font-family: sans-serif;
 }
 

@@ -10,6 +10,7 @@ interface WindowMoveState {
 
 const WindowAttributes = z.object({
   title: z.string().optional(),
+  unpadded: z.boolean().optional(),
 });
 type WindowAttributes = z.output<typeof WindowAttributes>;
 
@@ -23,7 +24,11 @@ export const Window = defineElement(
     #titleNode: Text;
 
     constructor(attrs: WindowAttributes) {
-      this.domSlot = h("div");
+      const unpadded = attrs.unpadded ?? false;
+
+      this.domSlot = h("div", {
+        style: { padding: unpadded ? "0" : "0.25rem" },
+      });
 
       this.#titleNode = document.createTextNode(
         attrs.title ?? DEFAULT_WINDOW_TITLE,
@@ -35,6 +40,8 @@ export const Window = defineElement(
             borderBottom: "1px solid black",
             touchAction: "none",
             userSelect: "none",
+            padding: "0.25rem",
+            textWrap: "nowrap",
           },
         },
         this.#titleNode,
@@ -43,10 +50,11 @@ export const Window = defineElement(
         "div",
         {
           style: {
-            border: "1px solid black",
+            border: "2px solid black",
             position: "absolute",
             backgroundColor: "white",
             zIndex: "1",
+            boxShadow: "0.25rem 0.25rem rgba(0,0,0,0.5)",
           },
         },
         windowTitlebar,
@@ -102,7 +110,9 @@ export const Window = defineElement(
     ) {
       switch (key) {
         case "title": {
-          this.#titleNode.textContent = value ?? DEFAULT_WINDOW_TITLE;
+          this.#titleNode.textContent =
+            value != null ? value.toString() : DEFAULT_WINDOW_TITLE;
+          break;
         }
       }
     }
