@@ -1,6 +1,8 @@
 import z from "zod";
 import { defineElement, h } from "./utils.ts";
 
+let topZIndex: number = 2;
+
 interface WindowMoveState {
   offsetX: number;
   offsetY: number;
@@ -44,6 +46,7 @@ export const Window = defineElement(
             border: "1px solid black",
             position: "absolute",
             backgroundColor: "white",
+            zIndex: "1",
           },
         },
         windowTitlebar,
@@ -72,6 +75,14 @@ export const Window = defineElement(
         };
 
         windowTitlebar.setPointerCapture(event.pointerId);
+
+        const currentZIndex = Number(windowEl.style.zIndex);
+        if (Number.isNaN(currentZIndex) || currentZIndex <= topZIndex) {
+          if (currentZIndex < topZIndex) {
+            topZIndex++;
+          }
+          windowEl.style.zIndex = topZIndex.toString();
+        }
       });
       windowTitlebar.addEventListener("pointerup", (event) => {
         windowTitlebar.releasePointerCapture(event.pointerId);
