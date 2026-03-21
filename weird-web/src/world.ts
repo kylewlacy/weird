@@ -6,12 +6,12 @@ import {
   type WeirdElementClass,
 } from "./elements";
 
-const ROOT_NODE_ID = NodeId.parse("0");
+export const ROOT_NODE_ID = NodeId.parse("0");
 
 export class World {
   #rootNode = createElement("World", {}, undefined);
 
-  #nodes: Record<NodeId, WorldNode> = {
+  nodes: Record<NodeId, WorldNode> = {
     [ROOT_NODE_ID]: this.#rootNode,
   };
 
@@ -27,7 +27,7 @@ export class World {
         break;
       }
 
-      const worldNode = this.#nodes[removed];
+      const worldNode = this.nodes[removed];
       if (worldNode == null) {
         console.warn(
           "got WorldDidChange event, but node does not exist",
@@ -36,10 +36,10 @@ export class World {
         continue;
       }
 
-      delete this.#nodes[removed];
+      delete this.nodes[removed];
 
       const parentNode =
-        worldNode.parent != null ? this.#nodes[worldNode.parent] : null;
+        worldNode.parent != null ? this.nodes[worldNode.parent] : null;
       switch (parentNode?.type) {
         case "element": {
           const childIndex = parentNode.children.indexOf(removed);
@@ -93,13 +93,13 @@ export class World {
           inserted.parent,
         );
       }
-      if (this.#nodes[inserted.id] != null) {
+      if (this.nodes[inserted.id] != null) {
         throw new Error(
           `tried to insert node ${inserted.id} but a node with that ID already exists`,
         );
       }
 
-      const parentNode = this.#nodes[inserted.parent];
+      const parentNode = this.nodes[inserted.parent];
       if (parentNode == null) {
         throw new Error(
           `tried to insert node ${inserted.id} but parent ${inserted.parent} not found`,
@@ -123,12 +123,12 @@ export class World {
           return unreachable(parentNode);
       }
 
-      this.#nodes[inserted.id] = worldNode;
+      this.nodes[inserted.id] = worldNode;
     }
   }
 
   printNodes() {
-    console.info(this.#nodes);
+    console.info(this.nodes);
   }
 }
 

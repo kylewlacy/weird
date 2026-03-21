@@ -1,3 +1,4 @@
+import { Debugger } from "./debugger.ts";
 import { WeirdClient } from "./protocol/client.ts";
 import "./styles/main.css";
 import { World } from "./world.ts";
@@ -7,8 +8,16 @@ if (appElement == null) {
   throw new Error("#app not found");
 }
 
+const debuggerElement = document.getElementById("debugger");
+if (debuggerElement == null) {
+  throw new Error("#debugger not found");
+}
+
 const world = new World();
 world.mount(appElement);
+
+const dbg = new Debugger();
+dbg.mount(debuggerElement);
 
 const url = new URL(window.location.href);
 url.port = "2552";
@@ -24,7 +33,7 @@ socket.addEventListener("open", () => {
     params: {},
     on: (event) => {
       world.handleWorldDidChangeEvent(event);
-      world.printNodes();
+      dbg.handleWorldDidChangeEvent(event);
     },
   });
 });

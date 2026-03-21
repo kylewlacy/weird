@@ -80,7 +80,7 @@ type ElementProperties<E extends HTMLElement> = Prettify<
     Partial<
       PickProperties<
         Writable<Pick<E, ValidPropertyNames & keyof E>>,
-        string | number | boolean | null | undefined
+        string | number | boolean | null | undefined | Node
       >
     >,
     {
@@ -164,4 +164,10 @@ export function h<Tag extends keyof HTMLElementTagNameMap>(
   }
 
   return el;
+}
+
+declare global {
+  interface CSSStyleDeclaration {
+    positionArea: string;
+  }
 }
