@@ -1,3 +1,4 @@
+import z from "zod";
 import { defineElement, h } from "./utils.ts";
 
 interface WindowMoveState {
@@ -5,12 +6,26 @@ interface WindowMoveState {
   offsetY: number;
 }
 
-export const Window = defineElement(
-  "weird-window",
-  class extends HTMLElement {
-    connectedCallback() {
-      const shadow = this.attachShadow({ mode: "open" });
+const WindowAttributes = z.object({
+  title: z.string().optional(),
+});
+type WindowAttributes = z.output<typeof WindowAttributes>;
 
+const DEFAULT_WINDOW_TITLE = "Untitled Window" as const;
+
+export const Window = defineElement(
+  WindowAttributes,
+  class {
+    dom: HTMLDivElement;
+    domSlot: HTMLDivElement;
+    #titleNode: Text;
+
+    constructor(attrs: WindowAttributes) {
+      this.domSlot = h("div");
+
+      this.#titleNode = document.createTextNode(
+        attrs.title ?? DEFAULT_WINDOW_TITLE,
+      );
       const windowTitlebar = h(
         "div",
         {
@@ -20,7 +35,7 @@ export const Window = defineElement(
             userSelect: "none",
           },
         },
-        "Window",
+        this.#titleNode,
       );
       const windowEl = h(
         "div",
@@ -32,8 +47,9 @@ export const Window = defineElement(
           },
         },
         windowTitlebar,
-        h("div", {}, h("slot")),
+        h("div", {}, this.domSlot),
       );
+      this.dom = windowEl;
 
       let pointerMoveState: WindowMoveState | undefined;
 
@@ -48,7 +64,6 @@ export const Window = defineElement(
 
         windowEl.style.transform = `translateX(${windowLeft}px) translateY(${windowTop}px)`;
       };
-
       windowTitlebar.addEventListener("pointerdown", (event) => {
         const windowRect = windowEl.getBoundingClientRect();
         pointerMoveState = {
@@ -68,8 +83,17 @@ export const Window = defineElement(
         pointerMoveState = undefined;
         windowTitlebar.removeEventListener("pointermove", onPointerMove);
       });
+    }
 
-      shadow.appendChild(windowEl);
+    changeAttribute<K extends keyof WindowAttributes>(
+      key: K,
+      value: WindowAttributes[K] | undefined,
+    ) {
+      switch (key) {
+        case "title": {
+          this.#titleNode.textContent = value ?? DEFAULT_WINDOW_TITLE;
+        }
+      }
     }
   },
 );

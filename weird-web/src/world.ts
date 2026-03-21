@@ -1,28 +1,22 @@
 import unreachable from "ts-unreachable";
 import { NodeId, type WorldDidChangeEvent } from "./protocol/types.ts";
-import { Window } from "./elements/Window.ts";
+import {
+  ELEMENTS,
+  type WeirdElement,
+  type WeirdElementClass,
+} from "./elements";
 
 const ROOT_NODE_ID = NodeId.parse("0");
 
 export class World {
+  #rootNode = createElement("World", {}, undefined);
+
   #nodes: Record<NodeId, WorldNode> = {
-    [ROOT_NODE_ID]: {
-      type: "element",
-      class: "World",
-      attributes: {},
-      children: [],
-      dom: createDomElement("World"),
-      parent: undefined,
-    },
+    [ROOT_NODE_ID]: this.#rootNode,
   };
 
   mount(element: HTMLElement) {
-    const rootNode = this.#nodes[ROOT_NODE_ID];
-    if (rootNode == null) {
-      throw new Error("root node not found");
-    }
-
-    element.appendChild(rootNode.dom);
+    element.appendChild(this.#rootNode.element.dom);
   }
 
   handleWorldDidChangeEvent(event: WorldDidChangeEvent) {
@@ -49,9 +43,9 @@ export class World {
       switch (parentNode?.type) {
         case "element": {
           const childIndex = parentNode.children.indexOf(removed);
-          if (childIndex !== -1) {
+          if (childIndex !== -1 && parentNode.element.domSlot != null) {
             parentNode.children.splice(childIndex, 1);
-            parentNode.dom.removeChild(worldNode.dom);
+            parentNode.element.domSlot.removeChild(worldNode.dom);
           } else {
             console.warn("node not found within parent element", {
               worldNode,
@@ -93,14 +87,11 @@ export class World {
           dom: document.createTextNode(inserted.node),
         };
       } else {
-        worldNode = {
-          type: "element",
-          parent: inserted.parent,
-          class: inserted.node.tag,
-          attributes: inserted.node.attributes,
-          children: [],
-          dom: createDomElement(inserted.node.tag),
-        };
+        worldNode = createElement(
+          inserted.node.tag,
+          inserted.node.attributes,
+          inserted.parent,
+        );
       }
       if (this.#nodes[inserted.id] != null) {
         throw new Error(
@@ -116,8 +107,13 @@ export class World {
       }
       switch (parentNode?.type) {
         case "element":
+          if (parentNode.element.domSlot == null) {
+            throw new Error(
+              `tried to insert node ${inserted.id} but parent ${inserted.parent} has no DOM slot`,
+            );
+          }
           parentNode.children.push(inserted.id);
-          parentNode.dom.appendChild(worldNode.dom);
+          parentNode.element.domSlot.appendChild(worldNode.dom);
           break;
         case "text":
           throw new Error(
@@ -140,13 +136,12 @@ export type WorldNode = WorldElement | WorldText;
 
 export interface WorldElement {
   type: "element";
-  parent: NodeId | undefined;
-  class: string | undefined;
+  tag: string;
+  attributes: object;
   children: NodeId[];
-  attributes: {
-    [attr: string]: unknown;
-  };
-  dom: HTMLElement;
+  parent: NodeId | undefined;
+  element: WeirdElement;
+  dom: Node;
 }
 
 export interface WorldText {
@@ -156,32 +151,26 @@ export interface WorldText {
   dom: Text;
 }
 
-interface WorldElementClass {
-  name: string;
-}
-
-const ELEMENTS = {
-  World: {
-    name: "div",
-  },
-  ProgressBar: {
-    name: "div",
-  },
-  Other: {
-    name: "span",
-  },
-  Window,
-} as const satisfies Record<string, WorldElementClass>;
-
-function createDomElement(className: string): HTMLElement {
-  const elementClass =
-    className in ELEMENTS
-      ? ELEMENTS[className as keyof typeof ELEMENTS]
-      : undefined;
-  if (elementClass != null) {
-    return document.createElement(elementClass.name);
-  } else {
-    // TODO: Show an error
-    return document.createElement("div");
+function createElement(
+  tag: string,
+  attributes: object,
+  parent: NodeId | undefined,
+): WorldElement {
+  let elementClass: WeirdElementClass | undefined =
+    tag in ELEMENTS ? ELEMENTS[tag as keyof typeof ELEMENTS] : undefined;
+  if (elementClass == undefined) {
+    elementClass = ELEMENTS.UnknownElement;
   }
+  const element = new elementClass(attributes);
+  return {
+    type: "element",
+    element,
+    tag,
+    attributes,
+    children: [],
+    parent,
+    get dom(): Node {
+      return this.element.dom;
+    },
+  };
 }

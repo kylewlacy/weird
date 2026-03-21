@@ -1,45 +1,78 @@
 import unreachable from "ts-unreachable";
 import type { Merge, PickProperties, Prettify, Writable } from "ts-essentials";
+import type * as z from "zod";
 
-interface DefinedElement {
-  name: string;
+export interface WeirdElementClass {
+  new (attributes: unknown): WeirdElement;
 }
 
-export function defineElement(
-  name: string,
-  constructor: CustomElementConstructor,
-): DefinedElement {
-  customElements.define(name, constructor);
-  return { name };
+export interface WeirdElement {
+  get dom(): Node;
+  get domSlot(): Element | null;
+
+  changeAttribute?(key: string, value: unknown, oldValue: unknown): void;
 }
 
-interface DefineElementFromTemplateOptions {
-  beforeAppend?: (options: { content: DocumentFragment }) => void;
+interface WeirdElementClassImpl<Attr extends object> {
+  new (attributes: Attr): WeirdElementImpl<Attr>;
 }
 
-export function defineElementFromTemplate(
-  name: string,
-  options: DefineElementFromTemplateOptions = {},
-): DefinedElement {
-  return defineElement(
-    name,
-    class extends HTMLElement {
-      constructor() {
-        super();
-        const template = document.getElementById(`template-${name}`);
-        if (!(template instanceof HTMLTemplateElement)) {
-          throw new Error(`template not found for custom element ${name}`);
-        }
+interface WeirdElementImpl<Attr extends object> {
+  get dom(): Node;
+  get domSlot(): Element | null;
 
-        const content = document.importNode(template.content, true);
+  changeAttribute?<K extends keyof Attr>(
+    key: K,
+    value: Attr[K] | undefined,
+    oldValue: Attr[K] | undefined,
+  ): void;
+}
 
-        options.beforeAppend?.({ content });
+export function defineElement<ZAttr extends z.ZodObject>(
+  attributeSchema: ZAttr,
+  class_: WeirdElementClassImpl<z.output<ZAttr>>,
+): WeirdElementClass {
+  return class {
+    #el: WeirdElementImpl<z.output<ZAttr>>;
 
-        const shadow = this.attachShadow({ mode: "open" });
-        shadow.appendChild(content);
+    get dom(): Node {
+      return this.#el.dom;
+    }
+
+    get domSlot(): Element | null {
+      return this.#el.domSlot;
+    }
+
+    constructor(attributes: unknown) {
+      const parsedAttributes = attributeSchema.parse(attributes);
+      this.#el = new class_(parsedAttributes);
+    }
+
+    changeAttribute?(key: string, value: unknown, oldValue: unknown): void {
+      if (!this.#el.changeAttribute) {
+        return;
       }
-    },
-  );
+
+      const parsedKey = attributeSchema.keyof().parse(key);
+      const parsedValue =
+        value === undefined
+          ? undefined
+          : attributeSchema.partial().parse({ [parsedKey]: value })[
+              parsedKey as keyof Attr
+            ];
+      const parsedOldValue =
+        oldValue === undefined
+          ? undefined
+          : attributeSchema.partial().parse({
+              [parsedKey]: oldValue,
+            })[parsedKey as keyof Attr];
+      this.#el.changeAttribute(
+        parsedKey as keyof Attr,
+        parsedValue,
+        parsedOldValue,
+      );
+    }
+  };
 }
 
 type ElementProperties<E extends HTMLElement> = Prettify<
