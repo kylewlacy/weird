@@ -5,6 +5,7 @@ import type {
   WorldDidChangeEvent,
 } from "./protocol/types.ts";
 import { ROOT_NODE_ID } from "./world.ts";
+import { ELEMENTS } from "./elements/index.ts";
 
 export class Debugger {
   #tree: HTMLElement;
@@ -150,6 +151,19 @@ function treeNode(node: FlatNode): TreeNode {
               { style: { fontFamily: "monospace, monospace" } },
               `<${node.tag}>`,
             ),
+            node.tag in ELEMENTS
+              ? null
+              : h(
+                  "span",
+                  {
+                    style: {
+                      marginLeft: "0.5rem",
+                      color: "#444",
+                      fontSize: "0.75rem",
+                    },
+                  },
+                  "(unknown tag)",
+                ),
           ),
           domSlot,
         ),
