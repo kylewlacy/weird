@@ -34,7 +34,7 @@ export const Window = defineElement(
         "div",
         {
           style: {
-            borderBottom: "1px solid black",
+            borderBottom: "2px solid black",
             touchAction: "none",
             userSelect: "none",
             padding: "0.25rem",
