@@ -197,7 +197,38 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                     }
                 });
             }
-            Request::Render { .. } => {
+            Request::TriggerEvent(trigger_event) => {
+                let world = state.world.read().await;
+
+                let result = world.trigger_event(trigger_event).await.map_or_else(
+                    |error| {
+                        Err(JsonRpcError {
+                            code: 2,
+                            message: format!("trigger event error: {error:?}"),
+                            data: serde_json::Value::Null,
+                        })
+                    },
+                    |_| Ok(Response::Empty),
+                );
+                let response = JsonRpcResponse::new(request.id, result);
+                let json = serde_json::to_string(&response);
+                let json = match json {
+                    Ok(json) => json,
+                    Err(error) => {
+                        tracing::warn!("failed to serialize message: {error}");
+                        break;
+                    }
+                };
+
+                let result = socket_tx.send(ws::Message::text(json)).await;
+                match result {
+                    Ok(()) => {}
+                    Err(error) => {
+                        tracing::warn!("failed to send web JSON RPC response: {error}");
+                    }
+                }
+            }
+            Request::Render { .. } | Request::NextEvent {} => {
                 tracing::warn!("message not supported for web connections");
                 continue;
             }

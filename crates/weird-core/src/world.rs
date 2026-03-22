@@ -1,17 +1,31 @@
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
+
+use tokio::sync::RwLock;
 
 pub struct World {
     nodes: BTreeMap<NodeId, Arc<FlatNode>>,
     parents: BTreeMap<NodeId, NodeId>,
     children: BTreeMap<NodeId, Vec<NodeId>>,
-    world_did_change_events: tokio::sync::broadcast::Sender<WorldDidChangeEvent>,
+    connection_by_node: BTreeMap<NodeId, ConnectionId>,
+    connections: BTreeMap<ConnectionId, Weak<RwLock<ConnectionInner>>>,
+    world_did_change_events: tokio::sync::broadcast::Sender<WorldDidChangeResponse>,
 }
 
 impl World {
-    pub fn create_node(&mut self, node: Node) -> NodeId {
+    pub fn create_connection(&mut self) -> Connection {
+        let id = self
+            .connections
+            .last_key_value()
+            .map_or(ConnectionId(0), |(last_id, _)| ConnectionId(last_id.0 + 1));
+        let inner = Arc::new(RwLock::new(ConnectionInner::default()));
+        self.connections.insert(id, Arc::downgrade(&inner));
+        Connection { id, _inner: inner }
+    }
+
+    pub fn create_node(&mut self, node: Node, connection_id: ConnectionId) -> NodeId {
         let new_id = self
             .nodes
             .last_key_value()
@@ -25,6 +39,7 @@ impl World {
             let id = next_id;
             next_id = NodeId(next_id.0 + 1);
 
+            self.connection_by_node.insert(id, connection_id);
             match node_tree {
                 Node::Text(text) => {
                     self.nodes.insert(id, Arc::new(FlatNode::Text(text)));
@@ -53,7 +68,7 @@ impl World {
     }
 
     pub fn insert_node(&mut self, insert: InsertNode) -> Result<usize, InsertNodeFailed> {
-        let mut event = WorldDidChangeEvent::default();
+        let mut event = WorldDidChangeResponse::default();
 
         let insert_index = self.insert_node_for_event(insert, &mut event)?;
 
@@ -65,7 +80,7 @@ impl World {
     fn insert_node_for_event(
         &mut self,
         insert: InsertNode,
-        event: &mut WorldDidChangeEvent,
+        event: &mut WorldDidChangeResponse,
     ) -> Result<usize, InsertNodeFailed> {
         if !self.nodes.contains_key(&insert.child) {
             return Err(InsertNodeFailed::NodeNotFound);
@@ -119,6 +134,8 @@ impl World {
     }
 
     pub fn remove_node(&mut self, node_id: NodeId) -> Result<NodeId, RemoveNodeFailed> {
+        self.connection_by_node.remove(&node_id);
+
         if !self.nodes.contains_key(&node_id) {
             return Err(RemoveNodeFailed::NodeNotFound);
         }
@@ -151,7 +168,7 @@ impl World {
         let num_receivers = self.world_did_change_events.receiver_count();
         if num_receivers != 0 {
             tracing::debug!(num_receivers, "broadcasting change event");
-            let mut event = WorldDidChangeEvent::default();
+            let mut event = WorldDidChangeResponse::default();
 
             event.removed.push(node_id);
 
@@ -167,8 +184,9 @@ impl World {
         &mut self,
         node_id: NodeId,
         children: Vec<Node>,
+        connection: ConnectionId,
     ) -> Result<(), SetNodeChildrenFailed> {
-        let mut event = WorldDidChangeEvent::default();
+        let mut event = WorldDidChangeResponse::default();
 
         if !self.nodes.contains_key(&node_id) {
             return Err(SetNodeChildrenFailed::NodeNotFound);
@@ -211,7 +229,7 @@ impl World {
         }
 
         for child in children {
-            let child = self.create_node(child);
+            let child = self.create_node(child, connection);
             self.insert_node_for_event(
                 InsertNode {
                     parent: node_id,
@@ -228,8 +246,8 @@ impl World {
         Ok(())
     }
 
-    pub fn initial_client_world_did_change_event(&self) -> WorldDidChangeEvent {
-        let mut event = WorldDidChangeEvent::default();
+    pub fn initial_client_world_did_change_event(&self) -> WorldDidChangeResponse {
+        let mut event = WorldDidChangeResponse::default();
 
         let root_children = self
             .children
@@ -263,8 +281,63 @@ impl World {
 
     pub fn subscribe_to_world_did_change_events(
         &self,
-    ) -> tokio::sync::broadcast::Receiver<WorldDidChangeEvent> {
+    ) -> tokio::sync::broadcast::Receiver<WorldDidChangeResponse> {
         self.world_did_change_events.subscribe()
+    }
+
+    pub async fn trigger_event(&self, event: TriggerEvent) -> Result<(), TriggerEventFailed> {
+        let connection = self
+            .connection_by_node
+            .get(&event.target_node_id)
+            .and_then(|connection_id| self.connections.get(connection_id)?.upgrade());
+        let Some(connection) = connection else {
+            return Err(TriggerEventFailed::NoConnectionForNode);
+        };
+
+        let mut connection = connection.write().await;
+        connection.event_queue.push_back(event);
+        let _ = connection.event_listener.send(());
+
+        Ok(())
+    }
+
+    pub async fn take_next_event(&self, connection: ConnectionId) -> Option<Event> {
+        let event = self.take_next_trigger_event(connection).await?;
+        let target_id = self
+            .nodes
+            .get(&event.target_node_id)
+            .and_then(|node| match &**node {
+                FlatNode::Element(element) => element.attributes.get("id"),
+                FlatNode::Text(_) => None,
+            })
+            .and_then(|id| id.as_str())
+            .map(ToString::to_string);
+        Some(Event {
+            event: event.event,
+            params: event.params,
+            target_node_id: event.target_node_id,
+            target_id,
+        })
+    }
+
+    async fn take_next_trigger_event(&self, connection: ConnectionId) -> Option<TriggerEvent> {
+        loop {
+            // Get the connection if it still exists
+            let connection = self.connections.get(&connection)?.upgrade()?;
+            let mut connection = connection.write().await;
+
+            // Pop an event if there's one currently queued
+            if let Some(event) = connection.event_queue.pop_front() {
+                return Some(event);
+            }
+
+            // Otherwise, subscribe...
+            let mut listener = connection.event_listener.subscribe();
+            drop(connection);
+
+            // ...and wait for the next event, then try again
+            listener.recv().await.ok()?;
+        }
     }
 }
 
@@ -276,9 +349,30 @@ impl Default for World {
             nodes: BTreeMap::from_iter([(ROOT_NODE_ID, Arc::new(root_node))]),
             parents: BTreeMap::new(),
             children: BTreeMap::from_iter([(ROOT_NODE_ID, vec![])]),
+            connections: BTreeMap::new(),
+            connection_by_node: BTreeMap::new(),
             world_did_change_events: tokio::sync::broadcast::Sender::new(10),
         }
     }
+}
+
+struct ConnectionInner {
+    event_queue: VecDeque<TriggerEvent>,
+    event_listener: tokio::sync::broadcast::Sender<()>,
+}
+
+impl Default for ConnectionInner {
+    fn default() -> Self {
+        Self {
+            event_queue: VecDeque::new(),
+            event_listener: tokio::sync::broadcast::Sender::new(10),
+        }
+    }
+}
+
+pub struct Connection {
+    pub id: ConnectionId,
+    _inner: Arc<RwLock<ConnectionInner>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -301,6 +395,15 @@ impl<'de> serde::Deserialize<'de> for NodeId {
         let s: &str = serde::Deserialize::deserialize(deserializer)?;
         let id = s.parse().map_err(serde::de::Error::custom)?;
         Ok(Self(id))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConnectionId(u64);
+
+impl std::fmt::Display for ConnectionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -348,6 +451,13 @@ impl Node {
             panic!("called .attr() on non-element node");
         };
         Self::Element(element.attr(name, value))
+    }
+
+    pub fn id(self, id: impl Into<String>) -> Self {
+        let Self::Element(element) = self else {
+            panic!("called .id() on non-element node");
+        };
+        Self::Element(element.id(id))
     }
 }
 
@@ -399,6 +509,10 @@ impl Element {
         self.element.attributes.insert(name, value);
         self
     }
+
+    pub fn id(self, id: impl Into<String>) -> Self {
+        self.attr("id", id.into())
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -441,6 +555,28 @@ impl InsertNodeOffset {
     pub const END: Self = InsertNodeOffset::FromEnd(0);
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct Event {
+    pub target_id: Option<String>,
+    pub target_node_id: NodeId,
+    pub event: String,
+    pub params: serde_json::Value,
+}
+
+impl Event {
+    pub fn is(&self, target_id: &str, event: &str) -> bool {
+        self.event == event && self.target_id.as_deref() == Some(target_id)
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TriggerEvent {
+    target_node_id: NodeId,
+    event: String,
+    params: serde_json::Value,
+}
+
 #[derive(Debug)]
 pub enum InsertNodeFailed {
     NodeNotFound,
@@ -466,7 +602,7 @@ pub enum SetNodeChildrenFailed {
 
 #[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WorldDidChangeEvent {
+pub struct WorldDidChangeResponse {
     inserted: Vec<InsertedNode>,
     removed: Vec<NodeId>,
 }
@@ -477,4 +613,9 @@ pub struct InsertedNode {
     id: NodeId,
     parent: NodeId,
     node: Arc<FlatNode>,
+}
+
+#[derive(Debug)]
+pub enum TriggerEventFailed {
+    NoConnectionForNode,
 }

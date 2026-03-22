@@ -13,17 +13,21 @@ if (debuggerElement == null) {
   throw new Error("#debugger not found");
 }
 
-const world = new World();
-world.mount(appElement);
-
-const dbg = new Debugger();
-dbg.mount(debuggerElement);
-
 const url = new URL(window.location.href);
 url.port = "2552";
 url.pathname = "/ws";
 const socket = new WebSocket(url);
 const client = new WeirdClient(socket);
+
+const world = new World();
+world.onTriggerEvent = (id, event, params) => {
+  client.triggerEvent(id, event, params);
+};
+
+world.mount(appElement);
+
+const dbg = new Debugger();
+dbg.mount(debuggerElement);
 
 socket.addEventListener("open", () => {
   console.info("[WebSocket] opened");

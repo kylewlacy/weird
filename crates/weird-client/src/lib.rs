@@ -126,6 +126,21 @@ impl WeirdClient {
             }
         }
     }
+
+    pub fn next_event(&self) -> Result<Option<weird_core::world::Event>, WeirdClientError> {
+        let response = self.request(weird_core::proto::Request::NextEvent {});
+        match response {
+            Ok(weird_core::proto::Response::Event(event)) => Ok(Some(event)),
+            Ok(weird_core::proto::Response::Empty) | Err(WeirdClientError::ChannelClosed) => {
+                Ok(None)
+            }
+            Ok(response) => Err(WeirdClientError::RpcUnexpectedResponse {
+                expected: "event",
+                actual: response.kind(),
+            }),
+            Err(error) => Err(error),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -141,4 +156,10 @@ pub enum WeirdClientError {
 
     #[error("received RPC error code {} from server: {}", _0.code, _0.message)]
     RpcError(weird_core::proto::JsonRpcError),
+
+    #[error("received unexpected RPC response from server: expected {expected} but got {actual}")]
+    RpcUnexpectedResponse {
+        expected: &'static str,
+        actual: &'static str,
+    },
 }

@@ -2,8 +2,12 @@ import unreachable from "ts-unreachable";
 import type { Merge, PickProperties, Prettify, Writable } from "ts-essentials";
 import type * as z from "zod";
 
+export interface WeirdElementContext {
+  triggerEvent(event: string, params: unknown): void;
+}
+
 export interface WeirdElementClass {
-  new (attributes: unknown): WeirdElement;
+  new (attributes: unknown, ctx: WeirdElementContext): WeirdElement;
 }
 
 export interface WeirdElement {
@@ -14,7 +18,7 @@ export interface WeirdElement {
 }
 
 interface WeirdElementClassImpl<Attr extends object> {
-  new (attributes: Attr): WeirdElementImpl<Attr>;
+  new (attributes: Attr, ctx: WeirdElementContext): WeirdElementImpl<Attr>;
 }
 
 interface WeirdElementImpl<Attr extends object> {
@@ -40,10 +44,10 @@ export function defineElement<ZAttr extends z.ZodObject>(
       return this.#el.domSlot;
     }
 
-    constructor(attributes: unknown) {
+    constructor(attributes: unknown, ctx: WeirdElementContext) {
       const parsedAttributes = attributeSchema.parse(attributes);
       this.#currentAttributes = parsedAttributes;
-      this.#el = new class_(parsedAttributes);
+      this.#el = new class_(parsedAttributes, ctx);
     }
 
     updateAttributes(attributes: unknown): void {

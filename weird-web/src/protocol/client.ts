@@ -6,6 +6,7 @@ import {
   JsonRpcError,
   JsonRpcRequest,
   Events,
+  NodeId,
 } from "./types";
 
 export class WeirdClient {
@@ -105,6 +106,27 @@ export class WeirdClient {
         this.#listeners.delete(id);
       },
     };
+  }
+
+  triggerEvent(id: NodeId, event: string, params: unknown) {
+    return new Promise((resolve, reject) => {
+      this.#sendRequest(
+        "triggerEvent",
+        { targetNodeId: id, event, params },
+        {
+          once: true,
+          on(_response) {
+            resolve(undefined);
+          },
+          onClose(cause) {
+            reject(new Error("Socket closed", { cause }));
+          },
+          onError(error) {
+            reject(new Error("Request failed", { cause: error }));
+          },
+        },
+      );
+    });
   }
 
   subscribe<E extends EventType>(options: SubscribeOptions<E>): Listener {

@@ -5,11 +5,22 @@ import {
   type WeirdElement,
   type WeirdElementClass,
 } from "./elements";
+import type { WeirdElementContext } from "./elements/utils.ts";
 
 export const ROOT_NODE_ID = NodeId.parse("0");
 
 export class World {
-  #rootNode = createElement("World", {}, undefined);
+  onTriggerEvent?: (id: NodeId, event: string, params: unknown) => void;
+
+  #rootNode = createElement({
+    id: ROOT_NODE_ID,
+    tag: "World",
+    attributes: {},
+    parent: undefined,
+    triggerEvent: (id, event, params) => {
+      this.onTriggerEvent?.(id, event, params);
+    },
+  });
 
   nodes: Record<NodeId, WorldNode> = {
     [ROOT_NODE_ID]: this.#rootNode,
@@ -87,11 +98,15 @@ export class World {
           dom: document.createTextNode(inserted.node),
         };
       } else {
-        worldNode = createElement(
-          inserted.node.tag,
-          inserted.node.attributes,
-          inserted.parent,
-        );
+        worldNode = createElement({
+          id: inserted.id,
+          tag: inserted.node.tag,
+          attributes: inserted.node.attributes,
+          parent: inserted.parent,
+          triggerEvent: (id: NodeId, event: string, params: unknown) => {
+            this.onTriggerEvent?.(id, event, params);
+          },
+        });
       }
       if (this.nodes[inserted.id] != null) {
         throw new Error(
@@ -151,24 +166,37 @@ export interface WorldText {
   dom: Text;
 }
 
-function createElement(
-  tag: string,
-  attributes: object,
-  parent: NodeId | undefined,
-): WorldElement {
+interface CreateElementOptions {
+  id: NodeId;
+  tag: string;
+  attributes: object;
+  parent: NodeId | undefined;
+  triggerEvent(id: NodeId, event: string, params: unknown): void;
+}
+
+function createElement(opts: CreateElementOptions): WorldElement {
   let elementClass: WeirdElementClass | undefined =
-    tag in ELEMENTS ? ELEMENTS[tag as keyof typeof ELEMENTS] : undefined;
+    opts.tag in ELEMENTS
+      ? ELEMENTS[opts.tag as keyof typeof ELEMENTS]
+      : undefined;
   if (elementClass == undefined) {
     elementClass = ELEMENTS.UnknownElement;
   }
-  const element = new elementClass(attributes);
+
+  const ctx = {
+    triggerEvent(event, params) {
+      opts.triggerEvent(opts.id, event, params);
+    },
+  } satisfies WeirdElementContext;
+
+  const element = new elementClass(opts.attributes, ctx);
   return {
     type: "element",
     element,
-    tag,
-    attributes,
+    tag: opts.tag,
+    attributes: opts.attributes,
     children: [],
-    parent,
+    parent: opts.parent,
     get dom(): Node {
       return this.element.dom;
     },

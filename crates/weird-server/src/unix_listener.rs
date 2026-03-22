@@ -30,6 +30,11 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
 
     let (rx, mut tx) = conn.split();
 
+    let world_conn = {
+        let mut world = state.world.write().await;
+        world.create_connection()
+    };
+    let connection_id = world_conn.id;
     let mut window_node = None;
 
     let rx = tokio::io::BufReader::new(rx);
@@ -57,14 +62,14 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
             }
         };
 
-        tracing::info!("got unix client message: {request:?}");
+        tracing::info!(%connection_id, "got unix client message: {request:?}");
 
         match request.body {
             Request::Render(render) => {
                 let mut world = state.world.write().await;
 
                 let response = if let Some(window_node) = window_node {
-                    let result = world.set_node_children(window_node, render);
+                    let result = world.set_node_children(window_node, render, connection_id);
                     result.map_or_else(
                         |error| {
                             Err(JsonRpcError {
@@ -83,6 +88,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                             weird_core::world::Element::new("Window")
                                 .children(render)
                                 .into(),
+                            connection_id,
                         ),
                     );
                     let result = world.insert_node(InsertNode {
@@ -112,7 +118,24 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                     tracing::warn!("failed to write response to Unix connection: {error:?}");
                 };
             }
-            Request::SyncWorld { .. } => {
+            Request::NextEvent {} => {
+                let world = state.world.read().await;
+
+                let response = world
+                    .take_next_event(world_conn.id)
+                    .await
+                    .map_or_else(|| Response::Empty, Response::Event);
+
+                let response = JsonRpcResponse::result(request.id, response);
+                let mut response_json = serde_json::to_string(&response)?;
+                response_json.push('\n');
+
+                let result = tx.write_all(response_json.as_bytes()).await;
+                if let Err(error) = result {
+                    tracing::warn!("failed to write response to Unix connection: {error:?}");
+                };
+            }
+            Request::SyncWorld { .. } | Request::TriggerEvent(_) => {
                 tracing::warn!("message not supported for Unix connections");
                 continue;
             }
