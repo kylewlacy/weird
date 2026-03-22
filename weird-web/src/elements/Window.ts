@@ -26,7 +26,9 @@ export const Window = defineElement(
     constructor(attrs: WindowAttributes) {
       const zIndex = topZIndex++;
 
-      this.domSlot = h("div");
+      this.domSlot = h("div", {
+        className: "weird-container",
+      });
       this.#titleNode = document.createTextNode("");
       const windowTitlebar = h(
         "div",

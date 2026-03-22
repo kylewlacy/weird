@@ -37,6 +37,12 @@ body,
   right: 0;
 }
 
+.weird-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 /* https://iamkate.com/code/tree-views/ */
 .weird-debugger-tree {
   line-height: 1.5;

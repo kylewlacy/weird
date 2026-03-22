@@ -7,7 +7,9 @@ export const UnknownElement = defineElement(
     dom: HTMLDivElement;
     domSlot: HTMLDivElement;
     constructor() {
-      this.dom = this.domSlot = h("div");
+      this.dom = this.domSlot = h("div", {
+        className: "weird-container",
+      });
     }
   },
 );
