@@ -24,6 +24,8 @@ export const Window = defineElement(
     #titleNode: Text;
 
     constructor(attrs: WindowAttributes) {
+      const zIndex = topZIndex++;
+
       this.domSlot = h("div");
       this.#titleNode = document.createTextNode("");
       const windowTitlebar = h(
@@ -46,7 +48,7 @@ export const Window = defineElement(
             border: "2px solid black",
             position: "absolute",
             backgroundColor: "white",
-            zIndex: "1",
+            zIndex: zIndex.toString(),
             boxShadow: "0.25rem 0.25rem rgba(0,0,0,0.5)",
           },
         },
