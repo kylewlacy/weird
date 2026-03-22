@@ -31,7 +31,7 @@ export class World {
   }
 
   handleWorldDidChangeEvent(event: WorldDidChangeEvent) {
-    const removeQueue = event.removed;
+    const removeQueue = [...event.removed];
     while (true) {
       const removed = removeQueue.shift();
       if (removed == null) {

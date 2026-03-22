@@ -71,7 +71,7 @@ export class Debugger {
     for (const removed of event.removed) {
       const removedNode = this.#nodes[removed];
       if (removedNode) {
-        removedNode.dom.parentElement?.removeChild(removedNode.dom);
+        removedNode.dom.remove();
       } else {
         console.warn("[Debugger] Failed to remove node", { removed });
       }
