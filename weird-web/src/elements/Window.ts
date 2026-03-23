@@ -69,8 +69,7 @@ export const Window = defineElement(
           event.clientX - windowEl.offsetLeft - pointerMoveState.offsetX;
         const windowTop =
           event.clientY - windowEl.offsetTop - pointerMoveState.offsetY;
-
-        windowEl.style.transform = `translateX(${windowLeft}px) translateY(${windowTop}px)`;
+        this.moveWindowTo({ left: windowLeft, top: windowTop });
       };
       windowTitlebar.addEventListener("pointerdown", (event) => {
         const windowRect = windowEl.getBoundingClientRect();
@@ -101,6 +100,19 @@ export const Window = defineElement(
       });
 
       this.updateAttributes(attrs);
+    }
+
+    moveWindowTo(pos: { left: number; top: number }) {
+      const windowRect = this.dom.getBoundingClientRect();
+      const bodyRect = document.body.getBoundingClientRect();
+
+      const leftMin = Math.min(0, 40 - windowRect.width);
+      const leftMax = Math.max(0, bodyRect.width - 40);
+      const topMin = -10;
+      const topMax = Math.max(0, bodyRect.height - 20);
+      const left = Math.min(leftMax, Math.max(leftMin, pos.left));
+      const top = Math.min(topMax, Math.max(topMin, pos.top));
+      this.dom.style.transform = `translateX(${left}px) translateY(${top}px)`;
     }
 
     updateAttributes(attrs: WindowAttributes) {
