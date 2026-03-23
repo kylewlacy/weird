@@ -15,6 +15,7 @@ export interface WeirdElement {
   get domSlot(): Element | null;
 
   updateAttributes(attributes: unknown): void;
+  didRemove(): void;
 }
 
 interface WeirdElementClassImpl<Attr extends object> {
@@ -26,6 +27,7 @@ interface WeirdElementImpl<Attr extends object> {
   get domSlot(): Element | null;
 
   updateAttributes?(attributes: Attr, oldAttributes: Attr): void;
+  didRemove?(): void;
 }
 
 export function defineElement<ZAttr extends z.ZodObject>(
@@ -60,6 +62,10 @@ export function defineElement<ZAttr extends z.ZodObject>(
       }
 
       this.#currentAttributes = parsedAttributes;
+    }
+
+    didRemove(): void {
+      this.#el.didRemove?.();
     }
   };
 }

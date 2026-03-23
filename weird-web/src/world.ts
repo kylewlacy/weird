@@ -47,6 +47,16 @@ export class World {
         continue;
       }
 
+      switch (worldNode.type) {
+        case "element":
+          worldNode.element.didRemove();
+          break;
+        case "text":
+          break;
+        default:
+          return unreachable(worldNode);
+      }
+
       delete this.nodes[removed];
 
       const parentNode =

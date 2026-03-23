@@ -22,6 +22,12 @@ export const Window = defineElement(
     dom: HTMLDivElement;
     domSlot: HTMLDivElement;
     #titleNode: Text;
+    #left: number = 0;
+    #top: number = 0;
+
+    #windowResizeListener = (): void => {
+      this.moveWindowTo({ left: this.#left, top: this.#top });
+    };
 
     constructor(attrs: WindowAttributes) {
       const zIndex = topZIndex++;
@@ -99,7 +105,13 @@ export const Window = defineElement(
         windowTitlebar.removeEventListener("pointermove", onPointerMove);
       });
 
+      window.addEventListener("resize", this.#windowResizeListener);
+      this.moveWindowTo({ left: 0, top: 0 });
       this.updateAttributes(attrs);
+    }
+
+    didRemove() {
+      window.removeEventListener("resize", this.#windowResizeListener);
     }
 
     moveWindowTo(pos: { left: number; top: number }) {
@@ -112,6 +124,10 @@ export const Window = defineElement(
       const topMax = Math.max(0, bodyRect.height - 20);
       const left = Math.min(leftMax, Math.max(leftMin, pos.left));
       const top = Math.min(topMax, Math.max(topMin, pos.top));
+
+      this.#left = left;
+      this.#top = top;
+
       this.dom.style.transform = `translateX(${left}px) translateY(${top}px)`;
     }
 
