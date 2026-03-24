@@ -1,16 +1,14 @@
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
-    sync::{Arc, Weak},
+    sync::Arc,
 };
-
-use tokio::sync::RwLock;
 
 pub struct World {
     nodes: BTreeMap<NodeId, Arc<FlatNode>>,
     parents: BTreeMap<NodeId, NodeId>,
     children: BTreeMap<NodeId, Vec<NodeId>>,
     connection_by_node: BTreeMap<NodeId, ConnectionId>,
-    connections: BTreeMap<ConnectionId, Weak<RwLock<ConnectionInner>>>,
+    connections: BTreeMap<ConnectionId, ConnectionInner>,
     world_did_change_events: tokio::sync::broadcast::Sender<WorldDidChangeResponse>,
 }
 
@@ -20,9 +18,11 @@ impl World {
             .connections
             .last_key_value()
             .map_or(ConnectionId(0), |(last_id, _)| ConnectionId(last_id.0 + 1));
-        let inner = Arc::new(RwLock::new(ConnectionInner::default()));
-        self.connections.insert(id, Arc::downgrade(&inner));
-        Connection { id, _inner: inner }
+        let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+        let inner = ConnectionInner { event_tx };
+        let conn = Connection { id, event_rx };
+        self.connections.insert(id, inner);
+        conn
     }
 
     pub fn create_node(&mut self, node: Node, connection_id: ConnectionId) -> NodeId {
@@ -289,20 +289,11 @@ impl World {
         let connection = self
             .connection_by_node
             .get(&event.target_node_id)
-            .and_then(|connection_id| self.connections.get(connection_id)?.upgrade());
+            .and_then(|connection_id| self.connections.get(connection_id));
         let Some(connection) = connection else {
             return Err(TriggerEventFailed::NoConnectionForNode);
         };
 
-        let mut connection = connection.write().await;
-        connection.event_queue.push_back(event);
-        let _ = connection.event_listener.send(());
-
-        Ok(())
-    }
-
-    pub async fn take_next_event(&self, connection: ConnectionId) -> Option<Event> {
-        let event = self.take_next_trigger_event(connection).await?;
         let target_id = self
             .nodes
             .get(&event.target_node_id)
@@ -312,32 +303,19 @@ impl World {
             })
             .and_then(|id| id.as_str())
             .map(ToString::to_string);
-        Some(Event {
+        let event = Event {
             event: event.event,
             params: event.params,
             target_node_id: event.target_node_id,
             target_id,
-        })
-    }
+        };
 
-    async fn take_next_trigger_event(&self, connection: ConnectionId) -> Option<TriggerEvent> {
-        loop {
-            // Get the connection if it still exists
-            let connection = self.connections.get(&connection)?.upgrade()?;
-            let mut connection = connection.write().await;
+        connection
+            .event_tx
+            .send(event)
+            .map_err(|_| TriggerEventFailed::NoConnectionForNode)?;
 
-            // Pop an event if there's one currently queued
-            if let Some(event) = connection.event_queue.pop_front() {
-                return Some(event);
-            }
-
-            // Otherwise, subscribe...
-            let mut listener = connection.event_listener.subscribe();
-            drop(connection);
-
-            // ...and wait for the next event, then try again
-            listener.recv().await.ok()?;
-        }
+        Ok(())
     }
 }
 
@@ -357,22 +335,18 @@ impl Default for World {
 }
 
 struct ConnectionInner {
-    event_queue: VecDeque<TriggerEvent>,
-    event_listener: tokio::sync::broadcast::Sender<()>,
-}
-
-impl Default for ConnectionInner {
-    fn default() -> Self {
-        Self {
-            event_queue: VecDeque::new(),
-            event_listener: tokio::sync::broadcast::Sender::new(10),
-        }
-    }
+    event_tx: tokio::sync::mpsc::UnboundedSender<Event>,
 }
 
 pub struct Connection {
     pub id: ConnectionId,
-    _inner: Arc<RwLock<ConnectionInner>>,
+    event_rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
+}
+
+impl Connection {
+    pub async fn next_event(&mut self) -> Option<Event> {
+        self.event_rx.recv().await
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

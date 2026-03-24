@@ -30,7 +30,7 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
 
     let (rx, mut tx) = conn.split();
 
-    let world_conn = {
+    let mut world_conn = {
         let mut world = state.world.write().await;
         world.create_connection()
     };
@@ -119,12 +119,8 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
                 };
             }
             Request::NextEvent {} => {
-                let world = state.world.read().await;
-
-                let response = world
-                    .take_next_event(world_conn.id)
-                    .await
-                    .map_or_else(|| Response::Empty, Response::Event);
+                let event = world_conn.next_event().await;
+                let response = event.map_or_else(|| Response::Empty, Response::Event);
 
                 let response = JsonRpcResponse::result(request.id, response);
                 let mut response_json = serde_json::to_string(&response)?;
