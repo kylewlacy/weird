@@ -1,5 +1,6 @@
 import z from "zod";
 import { defineElement, h } from "./utils.ts";
+import clsx from "clsx";
 
 const ProgressBarAttributes = z.object({
   value: z.number().optional(),
@@ -17,33 +18,27 @@ export const ProgressBar = defineElement(
 
     constructor(attrs: ProgressBarAttributes) {
       this.domSlot = h("div", {
-        style: {
-          position: "absolute",
-          inset: "0",
-          color: "#fff",
-          mixBlendMode: "difference",
-          textAlign: "center",
-        },
+        className: clsx(
+          "absolute",
+          "inset-0",
+          "text-white mix-blend-difference text-center",
+        ),
       });
       this.#progressBar = h(
         "div",
         {
-          style: {
-            position: "absolute",
-            inset: "0 auto 0 0",
-            backgroundColor: "black",
-            width: "25%",
-          },
+          className: clsx(
+            "absolute",
+            "inset-y-0 right-auto left-0",
+            "bg-black w-1/4",
+          ),
         },
         "\u00A0",
       );
       this.dom = h(
         "div",
         {
-          style: {
-            position: "relative",
-            lineHeight: "1.5",
-          },
+          className: clsx("relative border-2 border-black"),
         },
         "\u00A0",
         this.#progressBar,

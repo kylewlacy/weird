@@ -1,5 +1,6 @@
 import z from "zod";
 import { h, defineElement } from "./utils.ts";
+import clsx from "clsx";
 
 export const World = defineElement(
   z.object(),
@@ -8,7 +9,7 @@ export const World = defineElement(
     domSlot: HTMLDivElement;
     constructor() {
       this.dom = this.domSlot = h("div", {
-        style: { position: "relative" },
+        className: clsx("relative"),
       });
     }
   },

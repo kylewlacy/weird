@@ -6,6 +6,7 @@ import type {
 } from "./protocol/types.ts";
 import { ROOT_NODE_ID } from "./world.ts";
 import { ELEMENTS } from "./elements/index.ts";
+import clsx from "clsx";
 
 export class Debugger {
   #tree: HTMLElement;
@@ -17,32 +18,34 @@ export class Debugger {
   constructor() {
     const rootNode = treeNode({ tag: "World", attributes: {} });
 
-    const closeButton = h("button", { popoverTargetAction: "hide" }, "Close");
+    const closeButton = h(
+      "button",
+      {
+        popoverTargetAction: "hide",
+        className: clsx(
+          "bg-white border-2 border-current shadow-sm hover:shadow-sm/50 hover:bg-gray-200 focus:shadow-md focus:bg-gray-200 focus-visible:outline-2 focus-visible:outline-blue-400",
+        ),
+      },
+      "Close",
+    );
 
     this.#nodes = { [ROOT_NODE_ID]: rootNode };
     this.#tree = h(
       "ul",
       {
-        className: "weird-debugger-tree",
-        style: { overflow: "hidden", width: "100%" },
+        className: clsx("overflow-hidden w-full leading-6"),
       },
       rootNode.dom,
     );
     this.#view = h(
       "div",
       {
-        className: "weird-debugger-view",
+        className: clsx(
+          "bg-orange-200 p-2 border border-orange-900 fixed m-0 inset-auto position-area-bottom-span-left max-h-full w-2/5 shadow-md",
+        ),
         popover: "manual",
         style: {
-          backgroundColor: "#c19d6e",
-          padding: "0.5rem",
-          border: "1px solid #4f3f2b",
-          position: "fixed",
-          margin: "0",
-          inset: "auto",
           positionArea: "bottom span-left",
-          maxHeight: "100%",
-          width: "40%",
         },
       },
       closeButton,
@@ -55,6 +58,9 @@ export class Debugger {
         "button",
         {
           popoverTargetElement: this.#view,
+          className: clsx(
+            "bg-white border-2 border-current shadow-sm hover:shadow-sm/50 hover:bg-gray-200 focus:shadow-md focus:bg-gray-200 focus-visible:outline-2 focus-visible:outline-blue-400",
+          ),
         },
         "Debugger",
       ),
@@ -97,6 +103,12 @@ type TreeNode =
   | { kind: "leaf"; dom: HTMLElement };
 
 function treeNode(node: FlatNode): TreeNode {
+  // Inspired by: https://iamkate.com/code/tree-views/
+  const styleLi = clsx(
+    "block relative pl-9 border-l-2 border-gray-400 last:border-transparent before:content-[''] before:block before:absolute before:-top-3 before:-left-0.5 before:w-6.5 before:h-6.25 before:border-gray-400 before:border-b-2 before:border-l-2",
+  );
+  const styleUl = clsx("-ml-3.5 pl-0");
+
   if (typeof node === "string") {
     return {
       kind: "leaf",
@@ -104,27 +116,26 @@ function treeNode(node: FlatNode): TreeNode {
         "li",
         {
           title: node,
+          className: styleLi,
         },
         h(
           "span",
           {
-            style: { whiteSpace: "noWrap" },
+            className: clsx("whitespace-nowrap"),
           },
           h(
             "span",
             {
-              style: { fontFamily: "monospace, monospace" },
+              style: {
+                fontFamily: "monospace, monospace",
+              },
             },
             "Text",
           ),
           h(
             "span",
             {
-              style: {
-                fontSize: "0.75rem",
-                color: "#444",
-                marginLeft: "0.5rem",
-              },
+              className: clsx("text-xs text-gray-600 ml-2"),
             },
             JSON.stringify(node),
           ),
@@ -132,13 +143,13 @@ function treeNode(node: FlatNode): TreeNode {
       ),
     };
   } else {
-    const domSlot = h("ul");
+    const domSlot = h("ul", { className: styleUl });
     return {
       kind: "tree",
       dom: h(
         "li",
         {
-          className: "tree",
+          className: styleLi,
         },
         h(
           "details",
@@ -148,7 +159,9 @@ function treeNode(node: FlatNode): TreeNode {
             {},
             h(
               "span",
-              { style: { fontFamily: "monospace, monospace" } },
+              {
+                style: { fontFamily: "monospace, monospace" },
+              },
               `<${node.tag}>`,
             ),
             node.tag in ELEMENTS

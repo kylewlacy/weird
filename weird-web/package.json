@@ -12,6 +12,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "clsx": "^2.1.1",
+    "tailwindcss": "^4.2.2",
     "ts-unreachable": "^2.0.0",
     "zod": "^4.3.6"
   },
@@ -21,6 +24,7 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.2.0",
     "prettier": "^3.8.1",
+    "prettier-plugin-tailwindcss": "^0.7.2",
     "ts-essentials": "^10.1.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.1",

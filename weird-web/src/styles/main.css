@@ -1,117 +1,39 @@
-@import "reset.css";
+@import "tailwindcss";
 
-:root,
-body,
-#app {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  touch-action: none;
+@theme {
+  --color-wallpaper-primary: #e4ceb2;
+  --color-wallpaper-secondary: #695945;
+  --shadow-*: initial;
+  --shadow-xs: 1px 1px rgb(0 0 0 / 0.125);
+  --shadow-sm: 2px 2px rgb(0 0 0 / 0.25);
+  --shadow-md: 4px 4px rgb(0 0 0 / 0.5);
+  --shadow-lg: 6px 6px rgb(0 0 0 / 0.625);
+  --shadow-xl: 8px 8px rgb(0 0 0 / 0.75);
 }
 
-#app {
-  --bg-primary: #e4ceb2;
-  --bg-secondary: #695945;
-  --bg-size: 1.1px;
-  background-color: var(--bg-primary);
+:root {
+  --bg-wallpaper-pattern-size: 1.1px;
+}
+
+@utility bg-wallpaper {
+  background-color: var(--color-wallpaper-primary);
   background-image:
     radial-gradient(
-      var(--bg-secondary) var(--bg-size),
-      transparent var(--bg-size)
+      var(--color-wallpaper-secondary) var(--bg-wallpaper-pattern-size),
+      transparent var(--bg-wallpaper-pattern-size)
     ),
     radial-gradient(
-      var(--bg-secondary) var(--bg-size),
-      var(--bg-primary) var(--bg-size)
+      var(--color-wallpaper-secondary) var(--bg-wallpaper-pattern-size),
+      var(--color-wallpaper-primary) var(--bg-wallpaper-pattern-size)
     );
   background-size: 48px 48px;
   background-position:
     0 0,
     24px 24px;
-  font-family: sans-serif;
 }
 
-#debugger {
-  font-family: sans-serif;
-  position: absolute;
-  top: 0;
-  right: 0;
-}
-
-.weird-container {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-button {
-  border: 2px solid currentColor;
-  box-shadow: 0.125rem 0.125rem rgba(0, 0, 0, 0.25);
-  border-radius: 0;
-  background: white;
-  font: inherit;
-
-  &:hover,
-  &:focus {
-    box-shadow: 0.125rem 0.125rem rgba(0, 0, 0, 0.5);
-    background-color: #eee;
-  }
-
-  &:focus-visible {
-    outline: 2px solid #0091ff;
-  }
-}
-
-/* https://iamkate.com/code/tree-views/ */
-.weird-debugger-tree {
-  line-height: 1.5;
-
-  --spacing: 1.5rem;
-  --radius: 10px;
-  --line-color: #4f3f2b;
-
-  li {
-    display: block;
-    position: relative;
-    padding-left: calc(2 * var(--spacing) - var(--radius) - 2px);
-  }
-
-  ul {
-    margin-left: calc(var(--radius) - var(--spacing));
-    padding-left: 0;
-  }
-
-  ul li {
-    border-left: 2px solid var(--line-color);
-    box-sizing: border-box;
-  }
-
-  ul li:last-child {
-    border-color: transparent;
-  }
-
-  ul li:not(:has(li)) {
-    summary::marker {
-      color: #555;
-    }
-
-    summary::after {
-      margin-left: 0.5rem;
-      color: #444;
-      font-size: 0.75rem;
-      content: "(no children)";
-    }
-  }
-
-  ul li::before {
-    content: "";
-    display: block;
-    position: absolute;
-    top: calc(var(--spacing) / -2);
-    left: -2px;
-    width: calc(var(--spacing) + 2px);
-    height: calc(var(--spacing) + 1px);
-    border: solid var(--line-color);
-    border-width: 0 0 2px 2px;
-    box-sizing: border-box;
+@custom-variant childless {
+  &:not(:has(*)) {
+    @slot;
   }
 }

@@ -1,5 +1,6 @@
 import z from "zod";
 import { defineElement, h } from "./utils.ts";
+import clsx from "clsx";
 
 let topZIndex: number = 2;
 
@@ -32,32 +33,23 @@ export const Window = defineElement(
     constructor(attrs: WindowAttributes) {
       const zIndex = topZIndex++;
 
-      this.domSlot = h("div", {
-        className: "weird-container",
-      });
+      this.domSlot = h("div");
       this.#titleNode = document.createTextNode("");
       const windowTitlebar = h(
         "div",
         {
-          style: {
-            borderBottom: "2px solid black",
-            touchAction: "none",
-            userSelect: "none",
-            padding: "0.25rem",
-            textWrap: "nowrap",
-          },
+          className: clsx(
+            "border-b-2 border-black touch-none select-none px-1 text-nowrap",
+          ),
         },
         this.#titleNode,
       );
       const windowEl = h(
         "div",
         {
+          className: clsx("border-2 border-black absolute bg-white shadow-md"),
           style: {
-            border: "2px solid black",
-            position: "absolute",
-            backgroundColor: "white",
             zIndex: zIndex.toString(),
-            boxShadow: "0.25rem 0.25rem rgba(0,0,0,0.5)",
           },
         },
         windowTitlebar,
@@ -132,8 +124,12 @@ export const Window = defineElement(
     }
 
     updateAttributes(attrs: WindowAttributes) {
+      const unpadded = attrs.unpadded ?? false;
       this.#titleNode.textContent = attrs.title ?? DEFAULT_WINDOW_TITLE;
-      this.domSlot.style.padding = (attrs.unpadded ?? false) ? "0" : "0.25rem";
+      this.domSlot.className = clsx(
+        "flex flex-col gap-1",
+        unpadded ? "p-0" : "p-1",
+      );
     }
   },
 );
