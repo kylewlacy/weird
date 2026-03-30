@@ -39,7 +39,7 @@ export const Window = defineElement(
         "div",
         {
           className: clsx(
-            "border-b-2 border-black touch-none select-none px-1 text-nowrap",
+            "border-b-2 border-black touch-none select-none px-1 text-nowrap dark:border-zinc-300",
           ),
         },
         this.#titleNode,
@@ -47,7 +47,9 @@ export const Window = defineElement(
       const windowEl = h(
         "div",
         {
-          className: clsx("border-2 border-black absolute bg-white shadow-md"),
+          className: clsx(
+            "border-2 absolute shadow-md text-black bg-white border-black dark:text-white dark:border-zinc-300 dark:bg-zinc-800 dark:shadow-lg",
+          ),
           style: {
             zIndex: zIndex.toString(),
           },

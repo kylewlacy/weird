@@ -23,7 +23,7 @@ export class Debugger {
       {
         popoverTargetAction: "hide",
         className: clsx(
-          "bg-white border-2 border-current shadow-sm hover:shadow-sm/50 hover:bg-gray-200 focus:shadow-md focus:bg-gray-200 focus-visible:outline-2 focus-visible:outline-blue-400",
+          "bg-white border-2 border-current shadow-sm hover:shadow-sm/50 hover:bg-gray-200 focus:shadow-md focus:bg-gray-200 focus-visible:outline-2 focus-visible:outline-blue-400 dark:shadow-md dark:hover:shadow-md/50 dark:focus:shadow-lg",
         ),
       },
       "Close",

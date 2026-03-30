@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  --color-wallpaper-primary: #e4ceb2;
-  --color-wallpaper-secondary: #695945;
+  --color-wallpaper-primary: var(--color-orange-100);
+  --color-wallpaper-secondary: var(--color-taupe-900);
   --shadow-*: initial;
   --shadow-xs: 1px 1px rgb(0 0 0 / 0.125);
   --shadow-sm: 2px 2px rgb(0 0 0 / 0.25);
@@ -13,6 +13,13 @@
 
 :root {
   --bg-wallpaper-pattern-size: 1.1px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-wallpaper-primary: var(--color-taupe-900);
+    --color-wallpaper-secondary: var(--color-taupe-500);
+  }
 }
 
 @utility bg-wallpaper {
