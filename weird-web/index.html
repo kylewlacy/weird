@@ -10,6 +10,14 @@
       id="app"
       class="size-full overflow-hidden touch-none bg-wallpaper"
     ></div>
+    <div class="absolute bottom-4 left-4 p-1 bg-white border-2 border-black shadow-md flex flex-col">
+      <label for="weird-theme" class="font-bold sr-only">Theme</label>
+      <select id="weird-theme">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
     <div id="debugger" class="absolute top-0 right-0 p-4"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

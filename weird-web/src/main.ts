@@ -1,7 +1,10 @@
+import z from "zod";
 import { Debugger } from "./debugger.ts";
 import { WeirdClient } from "./protocol/client.ts";
 import "./styles/main.css";
 import { World } from "./world.ts";
+
+const Theme = z.enum(["system", "light", "dark"]);
 
 const appElement = document.getElementById("app");
 if (appElement == null) {
@@ -11,6 +14,21 @@ if (appElement == null) {
 const debuggerElement = document.getElementById("debugger");
 if (debuggerElement == null) {
   throw new Error("#debugger not found");
+}
+
+const savedTheme = Theme.safeParse(localStorage.getItem("theme"));
+document.body.dataset["theme"] = savedTheme.data ?? "system";
+
+const themeChooser = document.getElementById("weird-theme");
+if (themeChooser instanceof HTMLSelectElement) {
+  themeChooser.value = savedTheme.data ?? "system";
+  themeChooser.addEventListener("change", () => {
+    const newValue = Theme.safeParse(themeChooser.value).data ?? "system";
+    document.body.dataset["theme"] = newValue;
+    localStorage.setItem("theme", newValue);
+  });
+} else {
+  console.warn("select#weird-theme not found");
 }
 
 const url = new URL(window.location.href);
