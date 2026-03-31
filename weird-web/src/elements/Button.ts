@@ -1,5 +1,11 @@
 import z from "zod";
-import { defineElement, h, type WeirdElementContext } from "./utils.ts";
+import {
+  defineElement,
+  h,
+  type Children,
+  type ElementProperties,
+  type WeirdElementContext,
+} from "./utils.ts";
 import clsx from "clsx";
 
 const ButtonAttributes = z.object({});
@@ -12,11 +18,7 @@ export const Button = defineElement(
     domSlot: HTMLButtonElement;
 
     constructor(_attrs: ButtonAttributes, ctx: WeirdElementContext) {
-      const button = h("button", {
-        className: clsx(
-          "bg-white border-2 border-black shadow-sm hover:shadow-sm/50 hover:bg-zinc-200 focus:shadow-sm/50 focus:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-blue-400 dark:bg-zinc-800 dark:border-zinc-300 dark:hover:bg-zinc-700 dark:focus:bg-zinc-700 dark:shadow-md",
-        ),
-      });
+      const button = buttonComponent();
 
       button.addEventListener("click", () => {
         ctx.triggerEvent("click", {});
@@ -26,3 +28,20 @@ export const Button = defineElement(
     }
   },
 );
+
+export function buttonComponent(
+  attrs: ElementProperties<HTMLButtonElement> = {},
+  ...children: Children[]
+): HTMLButtonElement {
+  return h(
+    "button",
+    {
+      className: clsx(
+        "px-2 bg-white border-2 border-black shadow-sm hover:shadow-sm/50 hover:bg-zinc-200 focus:shadow-sm/50 focus:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:hover:bg-zinc-700 dark:focus:bg-zinc-700 dark:shadow-md",
+        attrs.className,
+      ),
+      ...attrs,
+    },
+    ...children,
+  );
+}

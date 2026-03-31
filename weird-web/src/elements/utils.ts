@@ -70,7 +70,7 @@ export function defineElement<ZAttr extends z.ZodObject>(
   };
 }
 
-type ElementProperties<E extends HTMLElement> = Prettify<
+export type ElementProperties<E extends HTMLElement> = Prettify<
   Merge<
     Partial<
       PickProperties<
@@ -112,7 +112,7 @@ type ValidPropertyNames =
   | `y${string}`
   | `z${string}`;
 
-type Children = undefined | null | string | Node | Children[];
+export type Children = undefined | null | string | Node | Children[];
 
 export function h<Tag extends keyof HTMLElementTagNameMap>(
   tag: Tag,
