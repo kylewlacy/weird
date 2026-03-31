@@ -7,6 +7,7 @@ import type {
 import { ROOT_NODE_ID } from "./world.ts";
 import { ELEMENTS } from "./elements/index.ts";
 import clsx from "clsx";
+import { buttonComponent } from "./elements/Button.ts";
 
 export class Debugger {
   #tree: HTMLElement;
@@ -18,13 +19,9 @@ export class Debugger {
   constructor() {
     const rootNode = treeNode({ tag: "World", attributes: {} });
 
-    const closeButton = h(
-      "button",
+    const closeButton = buttonComponent(
       {
         popoverTargetAction: "hide",
-        className: clsx(
-          "bg-white border-2 border-current shadow-sm hover:shadow-sm/50 hover:bg-gray-200 focus:shadow-md focus:bg-gray-200 focus-visible:outline-2 focus-visible:outline-blue-400 dark:shadow-md dark:hover:shadow-md/50 dark:focus:shadow-lg",
-        ),
       },
       "Close",
     );
@@ -41,7 +38,7 @@ export class Debugger {
       "div",
       {
         className: clsx(
-          "bg-orange-200 p-2 border border-orange-900 fixed m-0 inset-auto position-area-bottom-span-left max-h-full w-2/5 shadow-md",
+          "bg-orange-200 p-2 border border-orange-900 fixed m-0 inset-auto position-area-bottom-span-left max-h-full w-2/5 shadow-md dark:bg-amber-900 dark:border-amber-600 dark:shadow-lg dark:text-white",
         ),
         popover: "manual",
         style: {
@@ -54,13 +51,9 @@ export class Debugger {
     this.#element = h(
       "div",
       {},
-      h(
-        "button",
+      buttonComponent(
         {
           popoverTargetElement: this.#view,
-          className: clsx(
-            "bg-white border-2 border-current shadow-sm hover:shadow-sm/50 hover:bg-gray-200 focus:shadow-md focus:bg-gray-200 focus-visible:outline-2 focus-visible:outline-blue-400",
-          ),
         },
         "Debugger",
       ),
