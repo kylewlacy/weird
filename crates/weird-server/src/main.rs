@@ -4,6 +4,9 @@ use anyhow::Context as _;
 use tokio::{io::AsyncWriteExt as _, sync::RwLock};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
+use crate::conn::AppState;
+
+mod conn;
 mod http_listener;
 mod unix_listener;
 
@@ -22,9 +25,9 @@ async fn main() -> anyhow::Result<()> {
     let world = weird_core::world::World::default();
     let world = Arc::new(RwLock::new(world));
 
-    let http_app = http_listener::router(http_listener::AppState {
-        world: world.clone(),
-    });
+    let state = AppState { world };
+
+    let http_app = http_listener::router(state.clone());
 
     let http_listener = tokio::net::TcpListener::bind("0.0.0.0:2552").await?;
     let http_server_fut = async {
@@ -38,12 +41,7 @@ async fn main() -> anyhow::Result<()> {
     try_clean_up_old_socket(&unix_socket_path).await?;
     let unix_socket =
         tokio::net::UnixListener::bind(unix_socket_path).context("failed to bind weird.sock")?;
-    let unix_socket_fut = unix_listener::serve_unix_socket(
-        unix_socket,
-        unix_listener::AppState {
-            world: world.clone(),
-        },
-    );
+    let unix_socket_fut = unix_listener::serve_unix_socket(unix_socket, state);
 
     tokio::try_join!(http_server_fut, unix_socket_fut)?;
 
