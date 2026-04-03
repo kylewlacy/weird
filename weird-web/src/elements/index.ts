@@ -4,11 +4,13 @@ import { World } from "./World.ts";
 import { Window } from "./Window.ts";
 import { ProgressBar } from "./ProgressBar.ts";
 import { Button } from "./Button.ts";
+import { Input } from "./Input.ts";
 
 export type { WeirdElement, WeirdElementClass };
 
 export const ELEMENTS = {
   Button,
+  Input,
   ProgressBar,
   UnknownElement,
   Window,

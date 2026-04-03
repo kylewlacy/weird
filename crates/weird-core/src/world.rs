@@ -541,6 +541,22 @@ impl Event {
     pub fn is(&self, target_id: &str, event: &str) -> bool {
         self.event == event && self.target_id.as_deref() == Some(target_id)
     }
+
+    pub fn param<T>(&self, param: &str) -> serde_json::Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let params = self
+            .params
+            .as_object()
+            .ok_or_else(|| serde::de::Error::custom("expected event params to be an object"))?;
+        let param_value = params
+            .get(param)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let value = serde_json::from_value(param_value)?;
+        Ok(value)
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

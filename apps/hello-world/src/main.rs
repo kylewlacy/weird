@@ -6,11 +6,25 @@ const DELAY: std::time::Duration = std::time::Duration::from_millis(500);
 fn main() {
     let weird = WeirdClient::connect().unwrap();
 
-    let mut message = "Hello world!".to_string();
+    let mut name = "".to_string();
+    let mut message: Option<String> = None;
 
     loop {
+        let current_message;
+        let current_message = if let Some(message) = &message {
+            message
+        } else if name.is_empty() {
+            "Hello world!"
+        } else {
+            current_message = format!("Hello, {name}!");
+            &current_message
+        };
         weird.render([
-            Node::text(&message),
+            Node::text(current_message),
+            Node::element("Input")
+                .id("name")
+                .attr("value", &name)
+                .attr("placeholder", "Your name"),
             Node::element("Button").id("run").child(Node::text("Run")),
             Node::element("Button").id("exit").child(Node::text("Exit")),
         ]);
@@ -19,7 +33,10 @@ fn main() {
             break;
         };
 
-        if event.is("run", "click") {
+        if event.is("name", "change") {
+            name = event.param("value").unwrap();
+            name = name.trim().to_string()
+        } else if event.is("run", "click") {
             std::thread::scope(|scope| {
                 scope
                     .spawn(|| {
@@ -63,7 +80,7 @@ fn main() {
                                 .children([Node::element("Other"), Node::text("Progress 5")]),
                         ]);
                         std::thread::sleep(DELAY);
-                        message = "Finished running".to_string();
+                        message = Some("Finished running".to_string());
                     })
                     .join()
             })
@@ -71,7 +88,7 @@ fn main() {
         } else if event.is("exit", "click") {
             break;
         } else {
-            message = "Unknown event".to_string();
+            message = Some("Unknown event".to_string());
         }
     }
 }
