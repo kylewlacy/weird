@@ -19,8 +19,6 @@ export const Input = defineElement(
         className: clsx(
           "px-1 bg-white border-2 border-black shadow-sm focus-visible:shadow-sm/50 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:shadow-md",
         ),
-        value: attrs.value,
-        placeholder: attrs.placeholder,
       });
       this.dom.addEventListener("beforeinput", (e) => {
         const prefix = this.dom.value.substring(
@@ -35,6 +33,13 @@ export const Input = defineElement(
         ctx.triggerEvent("change", { value: newValue });
         e.preventDefault();
       });
+
+      this.updateAttributes(attrs);
+    }
+
+    updateAttributes(attrs: InputAttributes) {
+      this.dom.value = attrs.value ?? "";
+      this.dom.placeholder = attrs.placeholder ?? "";
     }
   },
 );
