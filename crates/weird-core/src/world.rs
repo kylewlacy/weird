@@ -25,6 +25,10 @@ impl World {
         conn
     }
 
+    pub fn nodes(&self) -> impl Iterator<Item = (NodeId, &FlatNode)> {
+        self.nodes.iter().map(|(key, value)| (*key, &**value))
+    }
+
     pub fn create_node(&mut self, node: Node, connection_id: ConnectionId) -> NodeId {
         let new_id = self
             .nodes
@@ -349,7 +353,7 @@ impl Connection {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(u64);
 
 impl serde::Serialize for NodeId {
@@ -489,18 +493,56 @@ impl Element {
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum FlatNode {
     Text(String),
     Element(FlatElement),
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+impl FlatNode {
+    pub fn text(text: impl Into<String>) -> Self {
+        Self::Text(text.into())
+    }
+
+    pub fn element(tag: impl Into<String>) -> Self {
+        Self::Element(FlatElement::new(tag))
+    }
+
+    pub fn attrs(self, attrs: impl IntoIterator<Item = (String, serde_json::Value)>) -> Self {
+        let Self::Element(element) = self else {
+            panic!("called .attrs() on non-element node");
+        };
+        Self::Element(element.attrs(attrs))
+    }
+
+    pub fn attr(self, name: impl Into<String>, value: impl serde::Serialize) -> Self {
+        let Self::Element(element) = self else {
+            panic!("called .attr() on non-element node");
+        };
+        Self::Element(element.attr(name, value))
+    }
+
+    pub fn id(self, id: impl Into<String>) -> Self {
+        let Self::Element(element) = self else {
+            panic!("called .id() on non-element node");
+        };
+        Self::Element(element.id(id))
+    }
+
+    pub fn get_id(&self) -> Option<&str> {
+        let Self::Element(element) = self else {
+            return None;
+        };
+        element.attributes.get("id")?.as_str()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FlatElement {
-    tag: String,
+    pub tag: String,
     #[serde(default)]
-    attributes: HashMap<String, serde_json::Value>,
+    pub attributes: HashMap<String, serde_json::Value>,
 }
 
 impl FlatElement {
@@ -509,6 +551,27 @@ impl FlatElement {
             tag: tag.into(),
             attributes: HashMap::new(),
         }
+    }
+
+    pub fn attrs(mut self, attrs: impl IntoIterator<Item = (String, serde_json::Value)>) -> Self {
+        self.attributes.extend(attrs);
+        self
+    }
+
+    pub fn attr(mut self, name: impl Into<String>, value: impl serde::Serialize) -> Self {
+        let name = name.into();
+        let value = serde_json::to_value(value).unwrap_or_else(|error| {
+            panic!(
+                "failed to serialize attribute '{name}' for tag '{}': {error}",
+                self.tag
+            )
+        });
+        self.attributes.insert(name, value);
+        self
+    }
+
+    pub fn id(self, id: impl Into<String>) -> Self {
+        self.attr("id", id.into())
     }
 }
 
@@ -590,19 +653,19 @@ pub enum SetNodeChildrenFailed {
     InvalidNodeType,
 }
 
-#[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorldDidChangeResponse {
-    inserted: Vec<InsertedNode>,
-    removed: Vec<NodeId>,
+    pub inserted: Vec<InsertedNode>,
+    pub removed: Vec<NodeId>,
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertedNode {
-    id: NodeId,
-    parent: NodeId,
-    node: Arc<FlatNode>,
+    pub id: NodeId,
+    pub parent: NodeId,
+    pub node: Arc<FlatNode>,
 }
 
 #[derive(Debug)]
