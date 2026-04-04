@@ -78,14 +78,18 @@ export class Debugger {
     }
 
     for (const inserted of event.inserted) {
-      const parentNode = this.#nodes[inserted.parent];
-      const newNode = treeNode(inserted.node);
-      this.#nodes[inserted.id] = newNode;
-
-      if (parentNode?.kind === "tree") {
-        parentNode.domSlot.appendChild(newNode.dom);
+      if (inserted.node == null) {
+        throw new Error("TODO: Move node");
       } else {
-        console.warn("[Debugger] Failed to insert node", { inserted });
+        const parentNode = this.#nodes[inserted.parentId];
+        const newNode = treeNode(inserted.node);
+        this.#nodes[inserted.id] = newNode;
+
+        if (parentNode?.kind === "tree") {
+          parentNode.domSlot.appendChild(newNode.dom);
+        } else {
+          console.warn("[Debugger] Failed to insert node", { inserted });
+        }
       }
     }
   }

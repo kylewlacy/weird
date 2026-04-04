@@ -112,7 +112,7 @@ pub async fn handle_conn(
                                 data: serde_json::Value::Null,
                             })
                         },
-                        |()| Ok(Response::Empty),
+                        |_| Ok(Response::Empty),
                     )
                 } else {
                     let window_node = window_node.insert(

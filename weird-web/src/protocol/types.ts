@@ -46,13 +46,23 @@ export type FlatNode = z.infer<typeof FlatNode>;
 
 export const InsertedNode = z.object({
   id: NodeId,
-  parent: NodeId,
-  node: FlatNode,
+  parentId: NodeId,
+  parentIndex: z.number(),
+  node: FlatNode.nullish(),
 });
 export type InsertedNode = z.infer<typeof InsertedNode>;
 
+export const UpdatedNode = z.object({
+  id: NodeId,
+  text: z.string().optional(),
+  setAttributes: z.record(z.string(), z.unknown()).optional(),
+  clearAttributes: z.string().array().optional(),
+});
+export type UpdatedNode = z.infer<typeof UpdatedNode>;
+
 export const WorldDidChangeEvent = z.object({
   inserted: InsertedNode.array(),
+  updated: UpdatedNode.array(),
   removed: NodeId.array(),
 });
 export type WorldDidChangeEvent = z.infer<typeof WorldDidChangeEvent>;

@@ -1,11 +1,11 @@
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     sync::Arc,
 };
 
 pub struct World {
     nodes: BTreeMap<NodeId, Arc<FlatNode>>,
-    parents: BTreeMap<NodeId, NodeId>,
+    parents: BTreeMap<NodeId, (NodeId, usize)>,
     children: BTreeMap<NodeId, Vec<NodeId>>,
     connection_by_node: BTreeMap<NodeId, ConnectionId>,
     connections: BTreeMap<ConnectionId, ConnectionInner>,
@@ -37,7 +37,8 @@ impl World {
             .expect("world.nodes is empty");
 
         let mut next_id = new_id;
-        let mut queue: VecDeque<(Node, Option<NodeId>)> = [(node, None)].into_iter().collect();
+        let mut queue: VecDeque<(Node, Option<(NodeId, usize)>)> =
+            [(node, None)].into_iter().collect();
 
         while let Some((node_tree, parent)) = queue.pop_front() {
             let id = next_id;
@@ -49,7 +50,13 @@ impl World {
                     self.nodes.insert(id, Arc::new(FlatNode::Text(text)));
                 }
                 Node::Element(element) => {
-                    queue.extend(element.children.into_iter().map(|child| (child, Some(id))));
+                    queue.extend(
+                        element
+                            .children
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, child)| (child, Some((id, index)))),
+                    );
 
                     self.nodes
                         .insert(id, Arc::new(FlatNode::Element(element.element)));
@@ -57,12 +64,12 @@ impl World {
                 }
             };
 
-            if let Some(parent) = parent {
-                self.parents.insert(id, parent);
+            if let Some((parent_id, index)) = parent {
+                self.parents.insert(id, (parent_id, index));
 
                 let parent_children = self
                     .children
-                    .get_mut(&parent)
+                    .get_mut(&parent_id)
                     .expect("parent element does not have a list of children");
                 parent_children.push(id);
             }
@@ -119,14 +126,17 @@ impl World {
         }
 
         parent_children.insert(insert_index, insert.child);
-        self.parents.insert(insert.child, insert.parent);
+        self.parents
+            .insert(insert.child, (insert.parent, insert_index));
 
         let mut queue = VecDeque::from_iter([insert.child]);
         while let Some(id) = queue.pop_front() {
+            let (parent_id, parent_index) = self.parents[&id];
             event.inserted.push(InsertedNode {
                 id,
-                parent: self.parents[&id],
-                node: self.nodes[&id].clone(),
+                parent_id,
+                parent_index,
+                node: Some(self.nodes[&id].clone()),
             });
 
             if let Some(children) = self.children.get(&id) {
@@ -144,30 +154,16 @@ impl World {
             return Err(RemoveNodeFailed::NodeNotFound);
         }
 
-        let parent = self
+        let (parent_id, parent_index) = self
             .parents
             .get(&node_id)
             .ok_or(RemoveNodeFailed::NoParentNode)?;
 
         let parent_children = self
             .children
-            .get_mut(parent)
-            .unwrap_or_else(|| panic!("children not found for parent {parent:?}"));
-
-        let child_pos = parent_children
-            .iter()
-            .enumerate()
-            .find_map(|(pos, child_id)| {
-                if *child_id == node_id {
-                    Some(pos)
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(|| {
-                panic!("tried to remove {node_id:?} but parent element did not contain it")
-            });
-        parent_children.remove(child_pos);
+            .get_mut(parent_id)
+            .unwrap_or_else(|| panic!("children not found for parent {parent_id:?}"));
+        parent_children.remove(*parent_index);
 
         let num_receivers = self.world_did_change_events.receiver_count();
         if num_receivers != 0 {
@@ -181,7 +177,59 @@ impl World {
             tracing::debug!("no listeners, skipping change event");
         }
 
-        Ok(*parent)
+        Ok(*parent_id)
+    }
+
+    fn remove_nodes_inner(
+        &mut self,
+        mut node_queue: VecDeque<NodeId>,
+        event: &mut WorldDidChangeResponse,
+    ) {
+        // Keep track of parent indices, since we'll need to fix the
+        // parent and children maps at the end
+        let mut parent_indices = HashMap::<NodeId, BTreeSet<usize>>::new();
+
+        while let Some(node_id) = node_queue.pop_front() {
+            // Remove the node from each map
+            self.nodes.remove(&node_id);
+            self.connection_by_node.remove(&node_id);
+            let parent = self.parents.remove(&node_id);
+            let children = self.children.remove(&node_id);
+
+            // Track the parent node
+            if let Some((parent_id, parent_index)) = parent {
+                parent_indices
+                    .entry(parent_id)
+                    .or_default()
+                    .insert(parent_index);
+            }
+
+            // Update the event
+            event.removed.push(node_id);
+
+            // Add the children to the queue, so each one gets removed too
+            node_queue.extend(children.into_iter().flatten());
+        }
+
+        // Update the parent and children maps for each parent node that's
+        // been updated
+        for (parent_id, child_indices) in parent_indices {
+            let Some(children) = self.children.get_mut(&parent_id) else {
+                // Skip if the parent node was also removed
+                continue;
+            };
+
+            // Remove each child node that was removed. We iterate starting
+            // from the largest index (otherwise the indices would shift)
+            for index in child_indices.iter().rev() {
+                children.remove(*index);
+            }
+
+            // Update each child's parent index
+            for (index, child_id) in children.iter().enumerate() {
+                self.parents.insert(*child_id, (parent_id, index));
+            }
+        }
     }
 
     pub fn set_node_children(
@@ -189,65 +237,113 @@ impl World {
         node_id: NodeId,
         children: Vec<Node>,
         connection: ConnectionId,
-    ) -> Result<(), SetNodeChildrenFailed> {
+    ) -> Result<bool, SetNodeChildrenFailed> {
         let mut event = WorldDidChangeResponse::default();
 
         if !self.nodes.contains_key(&node_id) {
             return Err(SetNodeChildrenFailed::NodeNotFound);
         }
 
-        let Some(prev_children) = self.children.get(&node_id) else {
-            return Err(SetNodeChildrenFailed::InvalidNodeType);
-        };
+        let mut update_queue = VecDeque::from_iter([(node_id, children)]);
 
-        tracing::info!("removing direct descendents: {:?}", prev_children);
-        event.removed.extend(prev_children.iter().copied());
+        while let Some((node_id, new_children)) = update_queue.pop_front() {
+            let Some(current_child_ids) = self.children.get(&node_id) else {
+                return Err(SetNodeChildrenFailed::InvalidNodeType);
+            };
 
-        let mut remove_queue: VecDeque<_> = prev_children.iter().copied().collect();
-        while let Some(remove) = remove_queue.pop_front() {
-            tracing::info!(?remove, parent = ?self.parents.get(&remove), children = ?self.children.get(&remove), "removing");
-
-            self.nodes.remove(&remove);
-            let parent_id = self.parents.remove(&remove);
-            let parent_children = parent_id.and_then(|parent_id| self.children.get_mut(&parent_id));
-
-            // Remove the parent node if it still exists. Since we remove
-            // nodes outside-in, we'll remove a parent before its children.
-            if let Some(parent_children) = parent_children {
-                let parent_child_index = parent_children
-                    .iter()
-                    .enumerate()
-                    .find_map(|(i, parent_child)| {
-                        if *parent_child == remove {
-                            Some(i)
-                        } else {
-                            None
-                        }
-                    })
-                    .expect("node not found within parent node's children");
-                parent_children.remove(parent_child_index);
+            let mut unmatched_children = HashMap::<NodeMatchKey, VecDeque<_>>::new();
+            for current_child_id in current_child_ids {
+                let current_child = &self.nodes[current_child_id];
+                let key = NodeMatchKey::from(&**current_child);
+                unmatched_children
+                    .entry(key)
+                    .or_default()
+                    .push_back(*current_child_id);
             }
-            let removed_children = self.children.remove(&remove);
 
-            remove_queue.extend(removed_children.into_iter().flatten());
+            let mut new_ordered_child_ids = vec![];
+
+            for child in new_children {
+                let key = NodeMatchKey::from(&child);
+                let matched_child_id = unmatched_children
+                    .get_mut(&key)
+                    .and_then(VecDeque::pop_front);
+
+                let child_id = if let Some(matched_child_id) = matched_child_id {
+                    let matched_child = self.nodes.get_mut(&matched_child_id).unwrap();
+
+                    let (child, child_children) = child.into_flat_and_children();
+
+                    if let Some(update) = node_update(matched_child, &child) {
+                        event.updated.push(UpdatedNode {
+                            id: matched_child_id,
+                            update,
+                        });
+                        *matched_child = Arc::new(child);
+                    }
+
+                    if let Some(child_children) = child_children {
+                        update_queue.push_back((matched_child_id, child_children));
+                    }
+
+                    matched_child_id
+                } else {
+                    let child_id = self.create_node(child, connection);
+                    self.insert_node_for_event(
+                        InsertNode {
+                            parent: node_id,
+                            child: child_id,
+                            offset: InsertNodeOffset::END,
+                        },
+                        &mut event,
+                    )
+                    .unwrap_or_else(|error| panic!("failed to insert node: {error:?}"));
+                    child_id
+                };
+
+                new_ordered_child_ids.push(child_id);
+            }
+
+            // Remove all the child nodes we couldn't match
+            // (Note: we sort through a `BTreeSet` just so the order is
+            // consistent, which is handy for testing)
+            let unmatched_children = unmatched_children
+                .into_values()
+                .flatten()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            self.remove_nodes_inner(unmatched_children, &mut event);
+
+            // Swap around the child nodes based on the new (matched) order
+            for (index, child_id) in new_ordered_child_ids.iter().enumerate() {
+                let (parent_id, current_index) = self.parents[child_id];
+                if index != current_index {
+                    let swapped_sibling_id = self.children[&parent_id][current_index];
+                    self.children
+                        .get_mut(&parent_id)
+                        .unwrap()
+                        .swap(index, current_index);
+
+                    self.parents.get_mut(child_id).unwrap().1 = index;
+                    self.parents.get_mut(&swapped_sibling_id).unwrap().1 = index;
+
+                    event.inserted.push(InsertedNode {
+                        id: *child_id,
+                        parent_id,
+                        parent_index: index,
+                        node: None,
+                    });
+                }
+            }
         }
 
-        for child in children {
-            let child = self.create_node(child, connection);
-            self.insert_node_for_event(
-                InsertNode {
-                    parent: node_id,
-                    child,
-                    offset: InsertNodeOffset::END,
-                },
-                &mut event,
-            )
-            .unwrap_or_else(|error| panic!("failed to insert node: {error:?}"));
+        if event.is_empty() {
+            Ok(false)
+        } else {
+            let _ = self.world_did_change_events.send(event);
+            Ok(true)
         }
-
-        let _ = self.world_did_change_events.send(event);
-
-        Ok(())
     }
 
     pub fn initial_client_world_did_change_event(&self) -> WorldDidChangeResponse {
@@ -268,15 +364,16 @@ impl World {
 
             // Every node has a parent except for the root node, which
             // is excluded from the `DidInsert` event
-            let parent = self
+            let (parent_id, parent_index) = self
                 .parents
                 .get(&id)
                 .unwrap_or_else(|| panic!("node {id:?} does not have a parent"));
 
             event.inserted.push(InsertedNode {
                 id,
-                parent: *parent,
-                node: node.clone(),
+                parent_id: *parent_id,
+                parent_index: *parent_index,
+                node: Some(node.clone()),
             });
         }
 
@@ -334,6 +431,94 @@ impl Default for World {
             connections: BTreeMap::new(),
             connection_by_node: BTreeMap::new(),
             world_did_change_events: tokio::sync::broadcast::Sender::new(10),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum NodeMatchKey {
+    Text,
+    Element {
+        tag: String,
+        id: Option<serde_json::Value>,
+    },
+}
+
+impl<'a> From<&'a FlatNode> for NodeMatchKey {
+    fn from(value: &'a FlatNode) -> Self {
+        match value {
+            FlatNode::Text(_) => NodeMatchKey::Text,
+            FlatNode::Element(element) => NodeMatchKey::Element {
+                tag: element.tag.clone(),
+                id: element.attributes.get("id").cloned(),
+            },
+        }
+    }
+}
+
+impl<'a> From<&'a Node> for NodeMatchKey {
+    fn from(value: &'a Node) -> Self {
+        match value {
+            Node::Text(_) => NodeMatchKey::Text,
+            Node::Element(element) => NodeMatchKey::Element {
+                tag: element.element.tag.clone(),
+                id: element.element.attributes.get("id").cloned(),
+            },
+        }
+    }
+}
+
+fn node_update(current: &FlatNode, updated: &FlatNode) -> Option<NodeUpdate> {
+    match (current, updated) {
+        (FlatNode::Element(current), FlatNode::Element(updated)) => {
+            let mut set_attributes = HashMap::new();
+            let mut clear_attributes = HashSet::new();
+
+            for (key, current_value) in &current.attributes {
+                let updated_value = updated.attributes.get(key);
+                match updated_value {
+                    Some(updated_value) if updated_value == current_value => {
+                        // Do nothing, value already matches
+                    }
+                    Some(updated_value) => {
+                        // Updated value does not match, so set it to update it
+                        set_attributes.insert(key.clone(), updated_value.clone());
+                    }
+                    None => {
+                        // Updated value does not exist, so clear the
+                        // attribute
+                        clear_attributes.insert(key.clone());
+                    }
+                }
+            }
+            for (key, updated_value) in &updated.attributes {
+                if !current.attributes.contains_key(key) {
+                    // Updated value exists but current value doesn't so
+                    // insert it
+                    set_attributes.insert(key.clone(), updated_value.clone());
+                }
+            }
+
+            if set_attributes.is_empty() && clear_attributes.is_empty() {
+                None
+            } else {
+                Some(NodeUpdate::Element {
+                    set_attributes,
+                    clear_attributes,
+                })
+            }
+        }
+        (FlatNode::Text(current), FlatNode::Text(updated)) => {
+            if current == updated {
+                None
+            } else {
+                Some(NodeUpdate::Text {
+                    text: updated.clone(),
+                })
+            }
+        }
+        (FlatNode::Text(_), FlatNode::Element(_)) | (FlatNode::Element(_), FlatNode::Text(_)) => {
+            panic!("tried to compute node update between different node types");
         }
     }
 }
@@ -436,6 +621,13 @@ impl Node {
             panic!("called .id() on non-element node");
         };
         Self::Element(element.id(id))
+    }
+
+    fn into_flat_and_children(self) -> (FlatNode, Option<Vec<Node>>) {
+        match self {
+            Self::Text(text) => (FlatNode::Text(text), None),
+            Self::Element(element) => (FlatNode::Element(element.element), Some(element.children)),
+        }
     }
 }
 
@@ -656,16 +848,52 @@ pub enum SetNodeChildrenFailed {
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorldDidChangeResponse {
-    pub inserted: Vec<InsertedNode>,
     pub removed: Vec<NodeId>,
+    pub updated: Vec<UpdatedNode>,
+    pub inserted: Vec<InsertedNode>,
+}
+
+impl WorldDidChangeResponse {
+    pub fn is_empty(&self) -> bool {
+        let Self {
+            removed,
+            updated,
+            inserted,
+        } = self;
+        removed.is_empty() && updated.is_empty() && inserted.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InsertedNode {
     pub id: NodeId,
-    pub parent: NodeId,
-    pub node: Arc<FlatNode>,
+    pub parent_id: NodeId,
+    pub parent_index: usize,
+    pub node: Option<Arc<FlatNode>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatedNode {
+    pub id: NodeId,
+    #[serde(flatten)]
+    pub update: NodeUpdate,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum NodeUpdate {
+    #[serde(rename_all = "camelCase")]
+    Text { text: String },
+    #[serde(rename_all = "camelCase")]
+    Element {
+        #[serde(skip_serializing_if = "HashMap::is_empty")]
+        set_attributes: HashMap<String, serde_json::Value>,
+
+        #[serde(skip_serializing_if = "HashSet::is_empty")]
+        clear_attributes: HashSet<String>,
+    },
 }
 
 #[derive(Debug)]
