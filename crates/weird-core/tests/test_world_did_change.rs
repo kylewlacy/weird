@@ -1,26 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use weird_core::world::{
-    ConnectionId, FlatNode, InsertedNode, Node, NodeId, NodeUpdate, UpdatedNode, World,
-    WorldDidChangeResponse,
+    Connection, ConnectionId, FlatNode, InsertNode, InsertedNode, Node, NodeId, NodeUpdate,
+    ROOT_NODE_ID, UpdatedNode, World, WorldDidChangeResponse,
 };
-
-fn init_tracing() {
-    use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
-
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .compact()
-                .with_target(false)
-                .without_time(),
-        )
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
-}
 
 macro_rules! assert_inserted_eq {
     ($inserted:expr, $parent_id:expr, $node:expr) => {{
@@ -68,13 +51,19 @@ pub async fn render(
     node_id: NodeId,
     children: Vec<Node>,
 ) -> WorldDidChangeResponse {
+    world.assert_internally_consistent();
+
     let mut rx = world.subscribe_to_world_did_change_events();
     let did_change = world.set_node_children(node_id, children, conn_id).unwrap();
-    if did_change {
+    let result = if did_change {
         rx.recv().await.unwrap()
     } else {
         WorldDidChangeResponse::default()
-    }
+    };
+
+    world.assert_internally_consistent();
+
+    result
 }
 
 pub fn node_id(world: &mut World, id: &str) -> NodeId {
@@ -90,14 +79,41 @@ pub fn node_id(world: &mut World, id: &str) -> NodeId {
         .unwrap()
 }
 
-#[tokio::test]
-async fn test_world_did_change_nothing() {
-    init_tracing();
+pub fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Connection, NodeId) {
+    use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .compact()
+                .with_target(false)
+                .without_time(),
+        )
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
 
     let mut world = World::default();
     let conn = world.create_connection();
 
-    let window = world.create_node(Node::element("Window"), conn.id);
+    let window_id = world.create_node(Node::element("Window").children(children), conn.id);
+    world
+        .insert_node(InsertNode {
+            parent: ROOT_NODE_ID,
+            child: window_id,
+            offset: weird_core::world::InsertNodeOffset::END,
+        })
+        .unwrap();
+
+    (world, conn, window_id)
+}
+
+#[tokio::test]
+async fn test_world_did_change_nothing() {
+    let (mut world, conn, window) = init_world([]);
+
     let diff = render(&mut world, conn.id, window, vec![]).await;
 
     assert_eq!(diff, WorldDidChangeResponse::default());
@@ -105,12 +121,8 @@ async fn test_world_did_change_nothing() {
 
 #[tokio::test]
 async fn test_world_did_change_add_to_empty() {
-    init_tracing();
+    let (mut world, conn, window) = init_world([]);
 
-    let mut world = World::default();
-    let conn = world.create_connection();
-
-    let window = world.create_node(Node::element("Window"), conn.id);
     let diff = render(
         &mut world,
         conn.id,
@@ -153,27 +165,19 @@ async fn test_world_did_change_add_to_empty() {
 
 #[tokio::test]
 async fn test_world_did_change_remove_all() {
-    init_tracing();
-
-    let mut world = World::default();
-    let conn = world.create_connection();
-
-    let window = world.create_node(
-        Node::element("Window")
+    let (mut world, conn, window) = init_world([
+        Node::element("Box")
+            .id("node1")
             .child(
                 Node::element("Box")
-                    .id("node1")
-                    .child(
-                        Node::element("Box")
-                            .attr("id", "node2")
-                            .child(Node::text("Foo")),
-                    )
-                    .child(Node::text("Bar")),
+                    .attr("id", "node2")
+                    .child(Node::text("Foo")),
             )
-            .child(Node::element("Button").child(Node::text("Click me")))
-            .child(Node::text("hello world")),
-        conn.id,
-    );
+            .child(Node::text("Bar")),
+        Node::element("Button").child(Node::text("Click me")),
+        Node::text("hello world"),
+    ]);
+
     let nodes = world
         .nodes()
         .map(|(node_id, node)| (node_id, node.clone()))
@@ -208,18 +212,12 @@ async fn test_world_did_change_remove_all() {
 
 #[tokio::test]
 async fn test_world_did_change_replace_all() {
-    init_tracing();
+    let (mut world, conn, window) = init_world([
+        Node::element("Fizz"),
+        Node::element("Buzz"),
+        Node::text("foobar"),
+    ]);
 
-    let mut world = World::default();
-    let conn = world.create_connection();
-
-    let window = world.create_node(
-        Node::element("Window")
-            .child(Node::element("Fizz"))
-            .child(Node::element("Buzz"))
-            .child(Node::text("foobar")),
-        conn.id,
-    );
     let nodes = world
         .nodes()
         .map(|(node_id, node)| (node_id, node.clone()))
@@ -268,21 +266,14 @@ async fn test_world_did_change_replace_all() {
 
 #[tokio::test]
 async fn test_world_did_change_reorder_nodes() {
-    init_tracing();
-
-    let mut world = World::default();
-    let conn = world.create_connection();
-
-    let window = world.create_node(
-        Node::element("Window")
-            .child(Node::element("First"))
-            .child(Node::element("Foo"))
-            .child(Node::element("Bar").id("node-bar"))
-            .child(Node::element("Other"))
-            .child(Node::text("text"))
-            .child(Node::element("Last")),
-        conn.id,
-    );
+    let (mut world, conn, window) = init_world([
+        Node::element("First"),
+        Node::element("Foo"),
+        Node::element("Bar").id("node-bar"),
+        Node::element("Other"),
+        Node::text("text"),
+        Node::element("Last"),
+    ]);
 
     let foo_id = world
         .nodes()
@@ -384,19 +375,12 @@ async fn test_world_did_change_reorder_nodes() {
 
 #[tokio::test]
 async fn test_world_did_change_update_nodes() {
-    init_tracing();
-
-    let mut world = World::default();
-    let conn = world.create_connection();
-
-    let window = world.create_node(
-        Node::element("Window")
-            .child(Node::element("Foo").attr("value", 1))
-            .child(Node::element("Bar").attr("value", "A"))
-            .child(Node::text("text 1"))
-            .child(Node::text("text 2")),
-        conn.id,
-    );
+    let (mut world, conn, window) = init_world([
+        Node::element("Foo").attr("value", 1),
+        Node::element("Bar").attr("value", "A"),
+        Node::text("text 1"),
+        Node::text("text 2"),
+    ]);
 
     let foo_id = world
         .nodes()
@@ -501,4 +485,71 @@ async fn test_world_did_change_update_nodes() {
             },
         ]
     );
+}
+
+#[tokio::test]
+async fn test_world_did_change_complex() {
+    let (mut world, conn, window) = init_world([
+        Node::element("Foo").attr("value", 1),
+        Node::element("Bar").attr("value", "A"),
+        Node::text("text 1"),
+        Node::text("text 2"),
+    ]);
+
+    render(
+        &mut world,
+        conn.id,
+        window,
+        vec![
+            Node::text("Running 4/5"),
+            Node::element("ProgressBar")
+                .attr("value", 4)
+                .attr("max", 5)
+                .children([Node::element("Other"), Node::text("Progress 4")]),
+            Node::element("Box")
+                .attr("id", "label1")
+                .child(Node::text("almost done...")),
+            Node::element("Box")
+                .attr("id", "label2")
+                .child(Node::text("...")),
+        ],
+    )
+    .await;
+    render(
+        &mut world,
+        conn.id,
+        window,
+        vec![
+            Node::text("Running 5/5"),
+            Node::element("ProgressBar")
+                .attr("value", 5)
+                .attr("max", 5)
+                .children([Node::element("Other"), Node::text("Progress 5")]),
+            Node::element("Box")
+                .attr("id", "label2")
+                .child(Node::text("almost done...")),
+            Node::element("Box")
+                .attr("id", "label3")
+                .child(Node::text("...")),
+            Node::element("Box")
+                .attr("id", "label1")
+                .child(Node::text("...")),
+        ],
+    )
+    .await;
+    render(
+        &mut world,
+        conn.id,
+        window,
+        vec![
+            Node::text("Hello, a!"),
+            Node::element("Input")
+                .id("name")
+                .attr("value", "a")
+                .attr("placeholder", "Your name"),
+            Node::element("Button").id("run").child(Node::text("Run")),
+            Node::element("Button").id("exit").child(Node::text("Exit")),
+        ],
+    )
+    .await;
 }

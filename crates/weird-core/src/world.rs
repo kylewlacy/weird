@@ -253,7 +253,10 @@ impl World {
 
             let mut unmatched_children = HashMap::<NodeMatchKey, VecDeque<_>>::new();
             for current_child_id in current_child_ids {
-                let current_child = &self.nodes[current_child_id];
+                let current_child = self
+                    .nodes
+                    .get(current_child_id)
+                    .unwrap_or_else(|| panic!("node not found: {current_child_id:?}"));
                 let key = NodeMatchKey::from(&**current_child);
                 unmatched_children
                     .entry(key)
@@ -318,23 +321,28 @@ impl World {
             // Swap around the child nodes based on the new (matched) order
             for (index, child_id) in new_ordered_child_ids.iter().enumerate() {
                 let (parent_id, current_index) = self.parents[child_id];
-                if index != current_index {
-                    let swapped_sibling_id = self.children[&parent_id][current_index];
-                    self.children
-                        .get_mut(&parent_id)
-                        .unwrap()
-                        .swap(index, current_index);
 
-                    self.parents.get_mut(child_id).unwrap().1 = index;
-                    self.parents.get_mut(&swapped_sibling_id).unwrap().1 = index;
+                // Ensure the node isn't being re-parented! This logic
+                // assumes that we're visiting every child
+                assert_eq!(parent_id, node_id);
 
-                    event.inserted.push(InsertedNode {
-                        id: *child_id,
-                        parent_id,
-                        parent_index: index,
-                        node: None,
-                    });
+                // Skip the node if it's already at the right index
+                if current_index == index {
+                    continue;
                 }
+
+                // Update the node's position
+                let children = self.children.get_mut(&node_id).unwrap();
+                children[index] = *child_id;
+                self.parents.insert(*child_id, (node_id, index));
+
+                // Add an event to move the node
+                event.inserted.push(InsertedNode {
+                    id: *child_id,
+                    parent_id: node_id,
+                    parent_index: index,
+                    node: None,
+                });
             }
         }
 
@@ -417,6 +425,58 @@ impl World {
             .map_err(|_| TriggerEventFailed::NoConnectionForNode)?;
 
         Ok(())
+    }
+
+    pub fn assert_internally_consistent(&self) {
+        assert!(self.is_internally_consistent());
+    }
+
+    fn is_internally_consistent(&self) -> bool {
+        for (node_id, node) in &self.nodes {
+            if !self.connection_by_node.contains_key(node_id) && *node_id != ROOT_NODE_ID {
+                tracing::warn!(?node_id, "node does not belong to a connection");
+                return false;
+            }
+
+            if !self.parents.contains_key(node_id) && *node_id != ROOT_NODE_ID {
+                tracing::warn!(?node_id, "node does not have a parent");
+                return false;
+            }
+
+            match &**node {
+                FlatNode::Text(_) => {
+                    if self.children.contains_key(node_id) {
+                        tracing::warn!(?node_id, "text node has children");
+                        return false;
+                    }
+                }
+                FlatNode::Element(_) => {}
+            }
+        }
+
+        let mut expected_parents = BTreeMap::new();
+        for (node_id, children_ids) in &self.children {
+            if !self.nodes.contains_key(node_id) {
+                tracing::warn!(?node_id, "parent node does not exist");
+                return false;
+            }
+
+            for (index, child_id) in children_ids.iter().enumerate() {
+                if !self.nodes.contains_key(child_id) {
+                    tracing::warn!(?child_id, "child node does not exist");
+                    return false;
+                }
+
+                expected_parents.insert(*child_id, (*node_id, index));
+            }
+        }
+
+        if self.parents != expected_parents {
+            tracing::warn!(parents = ?self.parents, children = ?self.children, "parent and child maps don't align");
+            return false;
+        }
+
+        true
     }
 }
 
