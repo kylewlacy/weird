@@ -70,6 +70,12 @@ fn main() {
                                 .attr("value", 4)
                                 .attr("max", 5)
                                 .children([Node::element("Other"), Node::text("Progress 4")]),
+                            Node::element("Box")
+                                .attr("id", "label1")
+                                .child(Node::text("almost done...")),
+                            Node::element("Box")
+                                .attr("id", "label2")
+                                .child(Node::text("...")),
                         ]);
                         std::thread::sleep(DELAY);
                         weird.render([
@@ -78,8 +84,17 @@ fn main() {
                                 .attr("value", 5)
                                 .attr("max", 5)
                                 .children([Node::element("Other"), Node::text("Progress 5")]),
+                            Node::element("Box")
+                                .attr("id", "label2")
+                                .child(Node::text("almost done...")),
+                            Node::element("Box")
+                                .attr("id", "label3")
+                                .child(Node::text("...")),
+                            Node::element("Box")
+                                .attr("id", "label1")
+                                .child(Node::text("...")),
                         ]);
-                        std::thread::sleep(DELAY);
+                        std::thread::sleep(DELAY * 3);
                         message = Some("Finished running".to_string());
                     })
                     .join()
