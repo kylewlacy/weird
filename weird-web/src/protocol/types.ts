@@ -52,20 +52,50 @@ export const InsertedNode = z.object({
 });
 export type InsertedNode = z.infer<typeof InsertedNode>;
 
-export const UpdatedNode = z.object({
+export const CreatedNodeChange = z.object({
+  type: z.literal("created"),
   id: NodeId,
-  text: z.string().optional(),
-  setAttributes: z.record(z.string(), z.unknown()).optional(),
-  clearAttributes: z.string().array().optional(),
+  parentId: NodeId,
+  beforeSiblingId: NodeId.nullish(),
+  node: FlatNode,
 });
-export type UpdatedNode = z.infer<typeof UpdatedNode>;
+export type CreatedNodeChange = z.infer<typeof CreatedNodeChange>;
 
-export const WorldDidChangeEvent = z.object({
-  inserted: InsertedNode.array(),
-  updated: UpdatedNode.array(),
-  removed: NodeId.array(),
+export const UpdatedNodeChange = z.object({
+  type: z.literal("updated"),
+  id: NodeId,
+  text: z.string().nullish(),
+  setAttributes: z.record(z.string(), z.unknown()).nullish(),
+  clearAttributes: z.string().array().nullish(),
 });
-export type WorldDidChangeEvent = z.infer<typeof WorldDidChangeEvent>;
+export type UpdatedNodeChange = z.infer<typeof UpdatedNodeChange>;
+
+export const MovedNodeChange = z.object({
+  type: z.literal("moved"),
+  id: NodeId,
+  parentId: NodeId,
+  beforeSiblingId: NodeId.nullish(),
+});
+export type MovedNodeChange = z.infer<typeof MovedNodeChange>;
+
+export const DeletedNodeChange = z.object({
+  type: z.literal("deleted"),
+  id: NodeId,
+});
+export type DeletedNodeChange = z.infer<typeof DeletedNodeChange>;
+
+export const WorldChange = z.discriminatedUnion("type", [
+  CreatedNodeChange,
+  UpdatedNodeChange,
+  MovedNodeChange,
+  DeletedNodeChange,
+]);
+type WorldChange = z.infer<typeof WorldChange>;
+
+export const WorldDidChangeResponse = z.object({
+  changes: WorldChange.array(),
+});
+export type WorldDidChangeResponse = z.infer<typeof WorldDidChangeResponse>;
 
 export const EventType = z.union([z.literal("syncWorld")]);
 export type EventType = z.infer<typeof EventType>;
@@ -73,7 +103,7 @@ export type EventType = z.infer<typeof EventType>;
 export const Events = {
   syncWorld: {
     request: z.object({}),
-    response: WorldDidChangeEvent,
+    response: WorldDidChangeResponse,
   },
 } as const satisfies {
   [K in EventType]: { request: z.ZodObject; response: z.ZodObject };

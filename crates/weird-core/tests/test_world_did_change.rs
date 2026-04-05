@@ -1,49 +1,11 @@
-use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
+use pretty_assertions::assert_eq;
 use weird_core::world::{
-    Connection, ConnectionId, FlatNode, InsertNode, InsertedNode, Node, NodeId, NodeUpdate,
-    ROOT_NODE_ID, UpdatedNode, World, WorldDidChangeResponse,
+    Connection, ConnectionId, CreatedNodeChange, DeletedNodeChange, ElementNodeUpdate, FlatNode,
+    InsertNode, MovedNodeChange, Node, NodeId, NodeUpdate, ROOT_NODE_ID, TextNodeUpdate,
+    UpdatedNodeChange, World, WorldChange, WorldDidChangeResponse,
 };
-
-macro_rules! assert_inserted_eq {
-    ($inserted:expr, $parent_id:expr, $node:expr) => {{
-        let inserted = &$inserted;
-        let parent_id = &$parent_id;
-        let node = &$node;
-        let parent_id_matches = inserted.parent_id == *parent_id;
-        let node_matches = inserted.node.as_deref() == Some(node);
-        match (parent_id_matches, node_matches) {
-            (true, true) => {},
-            (false, true) => {
-                panic!("assertion failed, parent ID does not match:\n  expected parent ID: {parent_id:?}\n  actual parent ID: {:?}", inserted.parent_id);
-            }
-            (true, false) => {
-                panic!("assertion failed, node does not match:\n  expected node: {node:?}\n  actual node: {:?}", inserted.node);
-            }
-            (false, false) => {
-                panic!("assertion failed, node and parent ID don't match:\n  expected parent ID {parent_id:?}, got {:?}\n  expected node: {node:?}\n  actual node: {:?}", inserted.parent_id, inserted.node);
-            }
-        }
-    }};
-    ($inserted_array:expr, [$(($parent_id:expr, $node:expr)),+]) => {{
-        let actual_array = &$inserted_array;
-        let expected_array = [$(($parent_id, $node)),*];
-        let actual_array_len = ::std::iter::IntoIterator::into_iter(actual_array).count();
-        let expected_array_len = expected_array.len();
-        for (inserted, (parent_id, node)) in std::iter::zip(actual_array, &expected_array) {
-            assert_inserted_eq!(inserted, *parent_id, *node);
-        }
-        assert_eq!(
-            actual_array_len,
-            expected_array_len,
-            "expected inserted to contain {expected_array_len} item{}, contained {actual_array_len}",
-            if expected_array_len == 1 { "" } else { "s" }
-        );
-    }};
-    ($inserted_array:expr, [$(($parent_id:expr, $node:expr)),+,]) => {{
-        assert_inserted_eq!($inserted_array, [$(($parent_id, $node)),*]);
-    }};
-}
 
 pub async fn render(
     world: &mut World,
@@ -67,7 +29,7 @@ pub async fn render(
 }
 
 pub fn node_id(world: &mut World, id: &str) -> NodeId {
-    world
+    let node_id = world
         .nodes()
         .find_map(|(node_id, node)| {
             if node.get_id() == Some(id) {
@@ -76,7 +38,68 @@ pub fn node_id(world: &mut World, id: &str) -> NodeId {
                 None
             }
         })
-        .unwrap()
+        .unwrap_or_else(|| panic!("node not found with ID '{id}'"));
+    tracing::info!(id, ?node_id, "found node");
+    node_id
+}
+
+pub fn node_text(world: &mut World, text: &str) -> NodeId {
+    let node_id = world
+        .nodes()
+        .find_map(|(node_id, node)| {
+            if let FlatNode::Text(node_text) = node
+                && node_text == text
+            {
+                Some(node_id)
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| panic!("node not found with text '{text}'"));
+    tracing::info!(text, ?node_id, "found node");
+    node_id
+}
+
+pub fn node_tag(world: &mut World, tag: &str) -> NodeId {
+    let node_id = world
+        .nodes()
+        .find_map(|(node_id, node)| {
+            if let FlatNode::Element(element) = node
+                && element.tag == tag
+            {
+                Some(node_id)
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| panic!("node not found with tag '{tag}'"));
+    tracing::info!(tag, ?node_id, "found node");
+    node_id
+}
+
+pub fn created(
+    id: NodeId,
+    parent_id: NodeId,
+    before_sibling_id: impl Into<Option<NodeId>>,
+    node: FlatNode,
+) -> WorldChange {
+    WorldChange::Created(CreatedNodeChange {
+        id,
+        parent_id,
+        before_sibling_id: before_sibling_id.into(),
+        node: Arc::new(node),
+    })
+}
+
+pub fn updated(id: NodeId, update: impl Into<NodeUpdate>) -> WorldChange {
+    WorldChange::Updated(UpdatedNodeChange {
+        id,
+        update: update.into(),
+    })
+}
+
+pub fn deleted(id: NodeId) -> WorldChange {
+    WorldChange::Deleted(DeletedNodeChange { id })
 }
 
 pub fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Connection, NodeId) {
@@ -142,23 +165,24 @@ async fn test_world_did_change_add_to_empty() {
     )
     .await;
 
-    let WorldDidChangeResponse {
-        inserted,
-        removed,
-        updated,
-    } = diff;
-    assert_eq!(removed, vec![]);
-    assert_eq!(updated, vec![]);
-    assert_inserted_eq!(
-        inserted,
-        [
-            (window, FlatNode::element("Box").id("node1")),
-            (inserted[0].id, FlatNode::element("Box").id("node2")),
-            (inserted[0].id, FlatNode::text("Bar")),
-            (inserted[1].id, FlatNode::text("Foo")),
-            (window, FlatNode::element("Button")),
-            (inserted[4].id, FlatNode::text("Click me")),
-            (window, FlatNode::text("hello world")),
+    let node_1 = node_id(&mut world, "node1");
+    let node_2 = node_id(&mut world, "node2");
+    let foo = node_text(&mut world, "Foo");
+    let bar = node_text(&mut world, "Bar");
+    let button = node_tag(&mut world, "Button");
+    let click_me = node_text(&mut world, "Click me");
+    let hello_world = node_text(&mut world, "hello world");
+
+    assert_eq!(
+        diff.changes,
+        &[
+            created(node_1, window, None, FlatNode::element("Box").id("node1")),
+            created(node_2, node_1, None, FlatNode::element("Box").id("node2")),
+            created(bar, node_1, None, FlatNode::text("Bar")),
+            created(foo, node_2, None, FlatNode::text("Foo")),
+            created(button, window, None, FlatNode::element("Button")),
+            created(click_me, button, None, FlatNode::text("Click me")),
+            created(hello_world, window, None, FlatNode::text("hello world")),
         ]
     );
 }
@@ -178,34 +202,26 @@ async fn test_world_did_change_remove_all() {
         Node::text("hello world"),
     ]);
 
-    let nodes = world
-        .nodes()
-        .map(|(node_id, node)| (node_id, node.clone()))
-        .collect::<HashMap<_, _>>();
+    let node_1 = dbg!(node_id(&mut world, "node1"));
+    let node_2 = dbg!(node_id(&mut world, "node2"));
+    let foo = dbg!(node_text(&mut world, "Foo"));
+    let bar = dbg!(node_text(&mut world, "Bar"));
+    let button = dbg!(node_tag(&mut world, "Button"));
+    let click_me = dbg!(node_text(&mut world, "Click me"));
+    let hello_world = dbg!(node_text(&mut world, "hello world"));
+
     let diff = render(&mut world, conn.id, window, vec![]).await;
 
-    let WorldDidChangeResponse {
-        inserted,
-        removed,
-        updated,
-    } = diff;
-    assert_eq!(inserted, vec![]);
-    assert_eq!(updated, vec![]);
-
-    let removed = removed
-        .iter()
-        .map(|node_id| nodes.get(node_id).unwrap().clone())
-        .collect::<Vec<_>>();
     assert_eq!(
-        removed,
-        vec![
-            FlatNode::element("Box").id("node1"),
-            FlatNode::element("Button"),
-            FlatNode::text("hello world"),
-            FlatNode::element("Box").id("node2"),
-            FlatNode::text("Bar"),
-            FlatNode::text("Click me"),
-            FlatNode::text("Foo"),
+        diff.changes,
+        &[
+            deleted(node_1),
+            deleted(button),
+            deleted(hello_world),
+            deleted(node_2),
+            deleted(bar),
+            deleted(click_me),
+            deleted(foo),
         ]
     );
 }
@@ -218,10 +234,10 @@ async fn test_world_did_change_replace_all() {
         Node::text("foobar"),
     ]);
 
-    let nodes = world
-        .nodes()
-        .map(|(node_id, node)| (node_id, node.clone()))
-        .collect::<HashMap<_, _>>();
+    let fizz = node_tag(&mut world, "Fizz");
+    let buzz = node_tag(&mut world, "Buzz");
+    let foobar = node_text(&mut world, "foobar");
+
     let diff = render(
         &mut world,
         conn.id,
@@ -234,32 +250,19 @@ async fn test_world_did_change_replace_all() {
     )
     .await;
 
-    let WorldDidChangeResponse {
-        inserted,
-        removed,
-        updated,
-    } = diff;
-    assert_eq!(updated, vec![]);
+    let foo = node_tag(&mut world, "Foo");
+    let bar = node_tag(&mut world, "Bar");
+    let other = node_tag(&mut world, "Other");
 
-    let removed = removed
-        .iter()
-        .map(|node_id| nodes.get(node_id).unwrap().clone())
-        .collect::<Vec<_>>();
     assert_eq!(
-        removed,
-        vec![
-            FlatNode::element("Fizz"),
-            FlatNode::element("Buzz"),
-            FlatNode::text("foobar"),
-        ]
-    );
-
-    assert_inserted_eq!(
-        inserted,
-        [
-            (window, FlatNode::element("Foo")),
-            (window, FlatNode::element("Bar")),
-            (window, FlatNode::element("Other")),
+        diff.changes,
+        &[
+            created(foo, window, None, FlatNode::element("Foo")),
+            created(bar, window, None, FlatNode::element("Bar")),
+            created(other, window, None, FlatNode::element("Other")),
+            deleted(fizz),
+            deleted(buzz),
+            deleted(foobar),
         ]
     );
 }
@@ -275,50 +278,11 @@ async fn test_world_did_change_reorder_nodes() {
         Node::element("Last"),
     ]);
 
-    let foo_id = world
-        .nodes()
-        .find_map(|(id, node)| {
-            if let FlatNode::Element(el) = node
-                && el.tag == "Foo"
-            {
-                Some(id)
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    let bar_id = world
-        .nodes()
-        .find_map(|(id, node)| {
-            if node.get_id() == Some("node-bar") {
-                Some(id)
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    let other_id = world
-        .nodes()
-        .find_map(|(id, node)| {
-            if let FlatNode::Element(el) = node
-                && el.tag == "Other"
-            {
-                Some(id)
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    let text_id = world
-        .nodes()
-        .find_map(|(id, node)| {
-            if matches!(node, FlatNode::Text(_)) {
-                Some(id)
-            } else {
-                None
-            }
-        })
-        .unwrap();
+    let foo = node_tag(&mut world, "Foo");
+    let bar = node_id(&mut world, "node-bar");
+    let other = node_tag(&mut world, "Other");
+    let text = node_text(&mut world, "text");
+    let last = node_tag(&mut world, "Last");
 
     let diff = render(
         &mut world,
@@ -335,40 +299,35 @@ async fn test_world_did_change_reorder_nodes() {
     )
     .await;
 
-    let WorldDidChangeResponse {
-        inserted,
-        removed,
-        updated,
-    } = diff;
-    assert_eq!(updated, vec![]);
-    assert_eq!(removed, vec![]);
+    println!("{:#?}", diff.changes);
+
     assert_eq!(
-        inserted,
-        vec![
-            InsertedNode {
-                id: other_id,
+        diff.changes,
+        &[
+            MovedNodeChange {
+                id: bar,
                 parent_id: window,
-                parent_index: 1,
-                node: None,
-            },
-            InsertedNode {
-                id: foo_id,
+                before_sibling_id: Some(last),
+            }
+            .into(),
+            MovedNodeChange {
+                id: text,
                 parent_id: window,
-                parent_index: 2,
-                node: None,
-            },
-            InsertedNode {
-                id: text_id,
+                before_sibling_id: Some(bar),
+            }
+            .into(),
+            MovedNodeChange {
+                id: foo,
                 parent_id: window,
-                parent_index: 3,
-                node: None,
-            },
-            InsertedNode {
-                id: bar_id,
+                before_sibling_id: Some(text),
+            }
+            .into(),
+            MovedNodeChange {
+                id: other,
                 parent_id: window,
-                parent_index: 4,
-                node: None,
-            },
+                before_sibling_id: Some(foo),
+            }
+            .into(),
         ]
     );
 }
@@ -382,54 +341,10 @@ async fn test_world_did_change_update_nodes() {
         Node::text("text 2"),
     ]);
 
-    let foo_id = world
-        .nodes()
-        .find_map(|(id, node)| {
-            if let FlatNode::Element(el) = node
-                && el.tag == "Foo"
-            {
-                Some(id)
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    let bar_id = world
-        .nodes()
-        .find_map(|(id, node)| {
-            if let FlatNode::Element(el) = node
-                && el.tag == "Bar"
-            {
-                Some(id)
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    let text_1_id = world
-        .nodes()
-        .find_map(|(id, node)| {
-            if let FlatNode::Text(text) = node
-                && text == "text 1"
-            {
-                Some(id)
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    let text_2_id = world
-        .nodes()
-        .find_map(|(id, node)| {
-            if let FlatNode::Text(text) = node
-                && text == "text 2"
-            {
-                Some(id)
-            } else {
-                None
-            }
-        })
-        .unwrap();
+    let foo = node_tag(&mut world, "Foo");
+    let bar = node_tag(&mut world, "Bar");
+    let text_1 = node_text(&mut world, "text 1");
+    let text_2 = node_text(&mut world, "text 2");
 
     let diff = render(
         &mut world,
@@ -444,45 +359,18 @@ async fn test_world_did_change_update_nodes() {
     )
     .await;
 
-    let WorldDidChangeResponse {
-        inserted,
-        removed,
-        updated,
-    } = diff;
-    assert_eq!(removed, vec![]);
-    assert_eq!(inserted, vec![]);
     assert_eq!(
-        updated,
-        vec![
-            UpdatedNode {
-                id: foo_id,
-                update: NodeUpdate::Element {
-                    set_attributes: HashMap::from_iter([
-                        ("value".to_string(), serde_json::to_value("B").unwrap()),
-                        ("added".to_string(), serde_json::to_value("C").unwrap())
-                    ]),
-                    clear_attributes: HashSet::new(),
-                }
-            },
-            UpdatedNode {
-                id: bar_id,
-                update: NodeUpdate::Element {
-                    set_attributes: HashMap::new(),
-                    clear_attributes: HashSet::from_iter(["value".to_string()]),
-                },
-            },
-            UpdatedNode {
-                id: text_1_id,
-                update: NodeUpdate::Text {
-                    text: "text 1!".to_string()
-                },
-            },
-            UpdatedNode {
-                id: text_2_id,
-                update: NodeUpdate::Text {
-                    text: "text 2!".to_string()
-                },
-            },
+        diff.changes,
+        &[
+            updated(
+                foo,
+                ElementNodeUpdate::default()
+                    .set_attr("value", "B")
+                    .set_attr("added", "C")
+            ),
+            updated(bar, ElementNodeUpdate::default().clear_attr("value")),
+            updated(text_1, TextNodeUpdate::new("text 1!")),
+            updated(text_2, TextNodeUpdate::new("text 2!")),
         ]
     );
 }

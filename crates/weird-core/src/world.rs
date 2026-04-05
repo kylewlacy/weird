@@ -132,12 +132,17 @@ impl World {
         let mut queue = VecDeque::from_iter([insert.child]);
         while let Some(id) = queue.pop_front() {
             let (parent_id, parent_index) = self.parents[&id];
-            event.inserted.push(InsertedNode {
+            let before_sibling_id = if parent_index + 1 < num_children {
+                Some(self.children[&parent_id][parent_index + 1])
+            } else {
+                None
+            };
+            event.changes.push(WorldChange::Created(CreatedNodeChange {
                 id,
                 parent_id,
-                parent_index,
-                node: Some(self.nodes[&id].clone()),
-            });
+                before_sibling_id,
+                node: self.nodes[&id].clone(),
+            }));
 
             if let Some(children) = self.children.get(&id) {
                 queue.extend(children.iter().copied());
@@ -170,7 +175,9 @@ impl World {
             tracing::debug!(num_receivers, "broadcasting change event");
             let mut event = WorldDidChangeResponse::default();
 
-            event.removed.push(node_id);
+            event
+                .changes
+                .push(WorldChange::Deleted(DeletedNodeChange { id: node_id }));
 
             let _ = self.world_did_change_events.send(event);
         } else {
@@ -205,7 +212,9 @@ impl World {
             }
 
             // Update the event
-            event.removed.push(node_id);
+            event
+                .changes
+                .push(WorldChange::Deleted(DeletedNodeChange { id: node_id }));
 
             // Add the children to the queue, so each one gets removed too
             node_queue.extend(children.into_iter().flatten());
@@ -230,6 +239,58 @@ impl World {
                 self.parents.insert(*child_id, (parent_id, index));
             }
         }
+    }
+
+    fn append_node_inner(
+        &mut self,
+        node: Node,
+        parent_id: NodeId,
+        connection_id: ConnectionId,
+        event: &mut WorldDidChangeResponse,
+    ) -> NodeId {
+        let node_id = self
+            .nodes
+            .last_key_value()
+            .map(|(last_id, _)| NodeId(last_id.0 + 1))
+            .expect("world.nodes is empty");
+        let mut queue = VecDeque::from_iter([(Some(node_id), node, parent_id)]);
+        while let Some((node_id, node, parent_id)) = queue.pop_front() {
+            let node_id = node_id.unwrap_or_else(|| {
+                self.nodes
+                    .last_key_value()
+                    .map(|(last_id, _)| NodeId(last_id.0 + 1))
+                    .expect("world.nodes is empty")
+            });
+
+            let (node, children) = node.into_flat_and_children();
+            let node = Arc::new(node);
+            self.nodes.insert(node_id, node.clone());
+            self.connection_by_node.insert(node_id, connection_id);
+
+            let parent_children = self
+                .children
+                .get_mut(&parent_id)
+                .unwrap_or_else(|| panic!("node {parent_id:?} cannot have children"));
+            let parent_index = parent_children.len();
+
+            parent_children.push(node_id);
+            self.parents.insert(node_id, (parent_id, parent_index));
+
+            if let Some(children) = children {
+                self.children.insert(node_id, vec![]);
+
+                queue.extend(children.into_iter().map(|child| (None, child, node_id)));
+            }
+
+            event.changes.push(WorldChange::Created(CreatedNodeChange {
+                id: node_id,
+                parent_id,
+                before_sibling_id: None,
+                node,
+            }));
+        }
+
+        node_id
     }
 
     pub fn set_node_children(
@@ -278,10 +339,10 @@ impl World {
                     let (child, child_children) = child.into_flat_and_children();
 
                     if let Some(update) = node_update(matched_child, &child) {
-                        event.updated.push(UpdatedNode {
+                        event.changes.push(WorldChange::Updated(UpdatedNodeChange {
                             id: matched_child_id,
                             update,
-                        });
+                        }));
                         *matched_child = Arc::new(child);
                     }
 
@@ -291,17 +352,7 @@ impl World {
 
                     matched_child_id
                 } else {
-                    let child_id = self.create_node(child, connection);
-                    self.insert_node_for_event(
-                        InsertNode {
-                            parent: node_id,
-                            child: child_id,
-                            offset: InsertNodeOffset::END,
-                        },
-                        &mut event,
-                    )
-                    .unwrap_or_else(|error| panic!("failed to insert node: {error:?}"));
-                    child_id
+                    self.append_node_inner(child, node_id, connection, &mut event)
                 };
 
                 new_ordered_child_ids.push(child_id);
@@ -318,32 +369,35 @@ impl World {
                 .collect();
             self.remove_nodes_inner(unmatched_children, &mut event);
 
-            // Swap around the child nodes based on the new (matched) order
-            for (index, child_id) in new_ordered_child_ids.iter().enumerate() {
-                let (parent_id, current_index) = self.parents[child_id];
+            // Reorder the child nodes. We do this in reverse order because
+            // moves events have a `before_sibling_id`, so moving the
+            // end nodes first simplifies things.
+            for (index, child_id) in new_ordered_child_ids.iter().enumerate().rev() {
+                let (parent_id, current_index) = self.parents.get_mut(child_id).unwrap();
 
                 // Ensure the node isn't being re-parented! This logic
                 // assumes that we're visiting every child
-                assert_eq!(parent_id, node_id);
+                assert_eq!(*parent_id, node_id);
 
                 // Skip the node if it's already at the right index
-                if current_index == index {
+                if *current_index == index {
                     continue;
                 }
 
-                // Update the node's position
-                let children = self.children.get_mut(&node_id).unwrap();
-                children[index] = *child_id;
-                self.parents.insert(*child_id, (node_id, index));
-
-                // Add an event to move the node
-                event.inserted.push(InsertedNode {
+                // Add the event
+                let before_sibling_id = new_ordered_child_ids.get(index + 1).copied();
+                event.changes.push(WorldChange::Moved(MovedNodeChange {
                     id: *child_id,
                     parent_id: node_id,
-                    parent_index: index,
-                    node: None,
-                });
+                    before_sibling_id,
+                }));
+
+                // Update the node's parent index
+                *current_index = index;
             }
+
+            // Update the child node list
+            self.children.insert(node_id, new_ordered_child_ids);
         }
 
         if event.is_empty() {
@@ -377,12 +431,13 @@ impl World {
                 .get(&id)
                 .unwrap_or_else(|| panic!("node {id:?} does not have a parent"));
 
-            event.inserted.push(InsertedNode {
+            let before_sibling_id = self.children[parent_id].get(parent_index + 1).copied();
+            event.changes.push(WorldChange::Created(CreatedNodeChange {
                 id,
                 parent_id: *parent_id,
-                parent_index: *parent_index,
-                node: Some(node.clone()),
-            });
+                before_sibling_id,
+                node: node.clone(),
+            }));
         }
 
         event
@@ -562,19 +617,17 @@ fn node_update(current: &FlatNode, updated: &FlatNode) -> Option<NodeUpdate> {
             if set_attributes.is_empty() && clear_attributes.is_empty() {
                 None
             } else {
-                Some(NodeUpdate::Element {
+                Some(NodeUpdate::Element(ElementNodeUpdate {
                     set_attributes,
                     clear_attributes,
-                })
+                }))
             }
         }
         (FlatNode::Text(current), FlatNode::Text(updated)) => {
             if current == updated {
                 None
             } else {
-                Some(NodeUpdate::Text {
-                    text: updated.clone(),
-                })
+                Some(NodeUpdate::Text(TextNodeUpdate::new(updated)))
             }
         }
         (FlatNode::Text(_), FlatNode::Element(_)) | (FlatNode::Element(_), FlatNode::Text(_)) => {
@@ -908,52 +961,136 @@ pub enum SetNodeChildrenFailed {
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorldDidChangeResponse {
-    pub removed: Vec<NodeId>,
-    pub updated: Vec<UpdatedNode>,
-    pub inserted: Vec<InsertedNode>,
+    pub changes: Vec<WorldChange>,
 }
 
 impl WorldDidChangeResponse {
     pub fn is_empty(&self) -> bool {
-        let Self {
-            removed,
-            updated,
-            inserted,
-        } = self;
-        removed.is_empty() && updated.is_empty() && inserted.is_empty()
+        self.changes.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WorldChange {
+    Created(CreatedNodeChange),
+    Updated(UpdatedNodeChange),
+    Moved(MovedNodeChange),
+    Deleted(DeletedNodeChange),
+}
+
+impl From<CreatedNodeChange> for WorldChange {
+    fn from(value: CreatedNodeChange) -> Self {
+        Self::Created(value)
+    }
+}
+
+impl From<UpdatedNodeChange> for WorldChange {
+    fn from(value: UpdatedNodeChange) -> Self {
+        Self::Updated(value)
+    }
+}
+
+impl From<MovedNodeChange> for WorldChange {
+    fn from(value: MovedNodeChange) -> Self {
+        Self::Moved(value)
+    }
+}
+
+impl From<DeletedNodeChange> for WorldChange {
+    fn from(value: DeletedNodeChange) -> Self {
+        Self::Deleted(value)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InsertedNode {
+pub struct CreatedNodeChange {
     pub id: NodeId,
     pub parent_id: NodeId,
-    pub parent_index: usize,
-    pub node: Option<Arc<FlatNode>>,
+    pub before_sibling_id: Option<NodeId>,
+    pub node: Arc<FlatNode>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UpdatedNode {
+pub struct UpdatedNodeChange {
     pub id: NodeId,
     #[serde(flatten)]
     pub update: NodeUpdate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MovedNodeChange {
+    pub id: NodeId,
+    pub parent_id: NodeId,
+    pub before_sibling_id: Option<NodeId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedNodeChange {
+    pub id: NodeId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum NodeUpdate {
     #[serde(rename_all = "camelCase")]
-    Text { text: String },
+    Text(TextNodeUpdate),
     #[serde(rename_all = "camelCase")]
-    Element {
-        #[serde(skip_serializing_if = "HashMap::is_empty")]
-        set_attributes: HashMap<String, serde_json::Value>,
+    Element(ElementNodeUpdate),
+}
 
-        #[serde(skip_serializing_if = "HashSet::is_empty")]
-        clear_attributes: HashSet<String>,
-    },
+impl From<TextNodeUpdate> for NodeUpdate {
+    fn from(value: TextNodeUpdate) -> Self {
+        Self::Text(value)
+    }
+}
+
+impl From<ElementNodeUpdate> for NodeUpdate {
+    fn from(value: ElementNodeUpdate) -> Self {
+        Self::Element(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextNodeUpdate {
+    text: String,
+}
+
+impl TextNodeUpdate {
+    pub fn new(text: impl Into<String>) -> Self {
+        Self { text: text.into() }
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementNodeUpdate {
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    set_attributes: HashMap<String, serde_json::Value>,
+
+    #[serde(skip_serializing_if = "HashSet::is_empty")]
+    clear_attributes: HashSet<String>,
+}
+
+impl ElementNodeUpdate {
+    pub fn set_attr(mut self, name: impl Into<String>, value: impl serde::Serialize) -> Self {
+        let name = name.into();
+        let value = serde_json::to_value(value)
+            .unwrap_or_else(|error| panic!("failed to serialize attribute '{name}': {error}"));
+        self.set_attributes
+            .insert(name, serde_json::to_value(value).unwrap());
+        self
+    }
+
+    pub fn clear_attr(mut self, name: impl Into<String>) -> Self {
+        self.clear_attributes.insert(name.into());
+        self
+    }
 }
 
 #[derive(Debug)]
