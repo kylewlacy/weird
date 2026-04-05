@@ -19,7 +19,7 @@ export const ProgressBar = defineElement(
     constructor(attrs: ProgressBarAttributes) {
       this.domSlot = h("div", {
         className: clsx(
-          "absolute inset-0 text-current mix-blend-difference text-center",
+          "absolute inset-0 mix-blend-difference text-center text-white",
         ),
       });
       this.#progressBar = h(
