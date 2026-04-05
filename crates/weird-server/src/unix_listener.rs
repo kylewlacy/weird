@@ -41,26 +41,26 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
     loop {
         tokio::select! {
             line = stream_rx_lines.next_line() => {
-        let line = match line {
-            Ok(Some(line)) => line,
-            Ok(None) => {
-                tracing::info!("unix client disconnected");
-                break;
-            }
-            Err(error) => {
-                tracing::warn!("unix client error: {error}");
-                break;
-            }
-        };
+                let line = match line {
+                    Ok(Some(line)) => line,
+                    Ok(None) => {
+                        tracing::info!("unix client disconnected");
+                        break;
+                    }
+                    Err(error) => {
+                        tracing::warn!("unix client error: {error}");
+                        break;
+                    }
+                };
 
-        let request = serde_json::from_str::<JsonRpcRequest<Request>>(&line);
-        let request = match request {
-            Ok(request) => request,
-            Err(error) => {
-                tracing::warn!("invalid JSON RPC request from Unix client: {error}");
-                break;
-            }
-        };
+                let request = serde_json::from_str::<JsonRpcRequest<Request>>(&line);
+                let request = match request {
+                    Ok(request) => request,
+                    Err(error) => {
+                        tracing::warn!("invalid JSON RPC request from Unix client: {error}");
+                        break;
+                    }
+                };
 
                 let in_result = client_in_tx.send(request).await;
                 if let Err(error) = in_result {
@@ -70,6 +70,11 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
 
             }
             response = client_out_rx.recv() => {
+                let Some(response) = response else {
+                    tracing::warn!("output channel closed for client");
+                    break;
+                };
+
                 let mut response_json = serde_json::to_string(&response)?;
                 response_json.push('\n');
 

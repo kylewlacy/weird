@@ -118,6 +118,11 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                 }
             }
             response = client_out_rx.recv() => {
+                let Some(response) = response else {
+                    tracing::warn!("output channel closed for client");
+                    break;
+                };
+
                 let json = serde_json::to_string(&response);
                 let json = match json {
                     Ok(json) => json,
