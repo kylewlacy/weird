@@ -1,5 +1,10 @@
 import z from "zod";
-import { defineElement, h } from "./utils.ts";
+import {
+  defineElement,
+  h,
+  type Children,
+  type ElementProperties,
+} from "./utils.ts";
 import clsx from "clsx";
 
 let topZIndex: number = 2;
@@ -22,6 +27,9 @@ export const Window = defineElement(
   class {
     dom: HTMLDivElement;
     domSlot: HTMLDivElement;
+    #maximizeButton: HTMLButtonElement;
+    #maximizeButtonTextNode: Text;
+    #isMaximized: boolean = false;
     #titleNode: Text;
     #left: number = 0;
     #top: number = 0;
@@ -35,20 +43,36 @@ export const Window = defineElement(
 
       this.domSlot = h("div");
       this.#titleNode = document.createTextNode("");
+      this.#maximizeButtonTextNode = document.createTextNode("^");
+      this.#maximizeButton = titlebarButtonComponent(
+        {},
+        this.#maximizeButtonTextNode,
+      );
       const windowTitlebar = h(
         "div",
         {
           className: clsx(
-            "border-b-2 border-black touch-none select-none px-1 text-nowrap dark:border-zinc-300",
+            "border-b-2 border-black touch-none select-none dark:border-zinc-300",
           ),
         },
-        this.#titleNode,
+        h(
+          "div",
+          {
+            className: clsx("flex items-center"),
+          },
+          h(
+            "div",
+            { className: clsx("flex-1 px-1 text-nowrap") },
+            this.#titleNode,
+          ),
+          this.#maximizeButton,
+        ),
       );
       const windowEl = h(
         "div",
         {
           className: clsx(
-            "border-2 absolute shadow-md text-black bg-white border-black dark:text-white dark:border-zinc-300 dark:bg-zinc-800 dark:shadow-lg",
+            "border-2 absolute shadow-md text-black bg-white border-black dark:text-white dark:border-zinc-300 dark:bg-zinc-800 dark:shadow-lg transition-window",
           ),
           style: {
             zIndex: zIndex.toString(),
@@ -81,6 +105,8 @@ export const Window = defineElement(
           return;
         }
 
+        windowEl.classList.add("weird-window-dragging");
+
         const windowRect = windowEl.getBoundingClientRect();
         const parentRect = windowEl.parentElement?.getBoundingClientRect();
         pointerMoveState = {
@@ -107,8 +133,17 @@ export const Window = defineElement(
         windowTitlebar.addEventListener("pointermove", onPointerMove);
       });
       windowTitlebar.addEventListener("lostpointercapture", () => {
+        windowEl.classList.remove("weird-window-dragging");
         pointerMoveState = undefined;
         windowTitlebar.removeEventListener("pointermove", onPointerMove);
+      });
+
+      this.#maximizeButton.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      this.#maximizeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        this.#toggleMaximized();
       });
 
       window.addEventListener("resize", this.#windowResizeListener);
@@ -139,6 +174,24 @@ export const Window = defineElement(
       this.dom.style.transform = `translateX(${left}px) translateY(${top}px)`;
     }
 
+    #setMaximized(maximize: boolean) {
+      this.#isMaximized = maximize;
+      this.#maximizeButtonTextNode.textContent = maximize ? "v" : "^";
+      if (maximize) {
+        this.dom.style.width = "100%";
+        this.dom.style.height = "100%";
+        this.dom.style.transform = `translateX(0px) translateY(0px)`;
+      } else {
+        this.dom.style.width = "auto";
+        this.dom.style.height = "auto";
+        this.moveWindowTo({ left: this.#left, top: this.#top });
+      }
+    }
+
+    #toggleMaximized() {
+      this.#setMaximized(!this.#isMaximized);
+    }
+
     updateAttributes(attrs: WindowAttributes) {
       const unpadded = attrs.unpadded ?? false;
       this.#titleNode.textContent = attrs.title ?? DEFAULT_WINDOW_TITLE;
@@ -149,3 +202,19 @@ export const Window = defineElement(
     }
   },
 );
+
+function titlebarButtonComponent(
+  attrs: ElementProperties<HTMLButtonElement> = {},
+  ...children: Children[]
+): HTMLButtonElement {
+  return h(
+    "button",
+    {
+      className: clsx(
+        "text-xs font-semibold w-6 h-6 m-0.5 bg-white border-2 border-black shadow-xs hover:shadow-xs/25 hover:bg-zinc-200 focus-visible:bg-zinc-200 active:bg-zinc-300 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:hover:bg-zinc-700 dark:focus-visible:bg-zinc-700 dark:active:bg-zinc-600",
+      ),
+      ...attrs,
+    },
+    ...children,
+  );
+}

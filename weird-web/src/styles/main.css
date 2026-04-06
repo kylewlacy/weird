@@ -25,6 +25,7 @@
 
 :root {
   --bg-wallpaper-pattern-size: 4px;
+  interpolate-size: allow-keywords;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -54,6 +55,16 @@
   background-position:
     0 0,
     48px 48px;
+}
+
+@utility transition-window {
+  transition-property: transform, translate, scale, rotate, width, height;
+  transition-timing-function: var(--default-transition-timing-function);
+  transition-duration: var(--default-transition-duration);
+
+  &.weird-window-dragging {
+    transition-property: width, height;
+  }
 }
 
 @custom-variant childless {
