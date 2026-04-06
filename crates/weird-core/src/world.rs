@@ -973,9 +973,14 @@ impl WorldDidChangeResponse {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WorldChange {
+    /// Create a new node, parented under an existing node.
     Created(CreatedNodeChange),
+    /// Update the content of an existing node.
     Updated(UpdatedNodeChange),
+    /// Move an existing node somewhere else in the tree.
     Moved(MovedNodeChange),
+    /// Delete an existing node. Each descendent will also include a deletion
+    /// change (either before or after its ancestors' deletions).
     Deleted(DeletedNodeChange),
 }
 
@@ -1003,19 +1008,32 @@ impl From<DeletedNodeChange> for WorldChange {
     }
 }
 
+/// Create a new node in the world.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatedNodeChange {
+    /// The ID of the new node.
     pub id: NodeId,
+
+    /// The ID of the parent node for the new node.
     pub parent_id: NodeId,
+
+    /// The child node within the parent that this node comes before, or
+    /// `None` if the new node was added to the end of the parent node.
     pub before_sibling_id: Option<NodeId>,
+
+    /// The content of the new node. Every node starts without any children--
+    /// child nodes are created with further changes.
     pub node: Arc<FlatNode>,
 }
 
+/// Update the content of an existing node.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatedNodeChange {
+    /// The ID of the node to update.
     pub id: NodeId,
+
     #[serde(flatten)]
     pub update: NodeUpdate,
 }
@@ -1023,14 +1041,21 @@ pub struct UpdatedNodeChange {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MovedNodeChange {
+    /// The ID of the node to move.
     pub id: NodeId,
+
+    /// The ID of new parent for the node.
     pub parent_id: NodeId,
+
+    /// The child node within the parent that this node comes before, or
+    /// `None` if the node was moved to the end of the parent node.
     pub before_sibling_id: Option<NodeId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeletedNodeChange {
+    /// The ID of the node to delete.
     pub id: NodeId,
 }
 
@@ -1058,6 +1083,7 @@ impl From<ElementNodeUpdate> for NodeUpdate {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextNodeUpdate {
+    /// The new text content of the node.
     text: String,
 }
 
@@ -1070,9 +1096,11 @@ impl TextNodeUpdate {
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElementNodeUpdate {
+    /// Attributes to add or replace in the element.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     set_attributes: HashMap<String, serde_json::Value>,
 
+    /// Attributes to remove from the element.
     #[serde(skip_serializing_if = "HashSet::is_empty")]
     clear_attributes: HashSet<String>,
 }
