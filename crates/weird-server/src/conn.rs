@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 use tracing::Instrument;
 use weird_core::{
     proto::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, Request, Response},
-    world::{InsertNode, InsertNodeOffset, ROOT_NODE_ID, World},
+    world::{ROOT_NODE_ID, World},
 };
 
 #[derive(Clone)]
@@ -115,31 +115,16 @@ pub async fn handle_conn(
                         |_| Ok(Response::Empty),
                     )
                 } else {
-                    let window_node = window_node.insert(
-                        world.create_node(
+                    window_node = Some(
+                        world.append_node(
                             weird_core::world::Element::new("Window")
                                 .children(render)
                                 .into(),
+                            ROOT_NODE_ID,
                             conn.id,
                         ),
                     );
-                    let result = world.insert_node(InsertNode {
-                        parent: ROOT_NODE_ID,
-                        child: *window_node,
-                        offset: InsertNodeOffset::END,
-                    });
-                    result.map_or_else(
-                        |error| {
-                            Err(JsonRpcError {
-                                code: 1,
-                                message: format!(
-                                    "failed to insert node in render request: {error:?}"
-                                ),
-                                data: serde_json::Value::Null,
-                            })
-                        },
-                        |_| Ok(Response::Empty),
-                    )
+                    Ok(Response::Empty)
                 };
                 let response = JsonRpcResponse::new(request.id, response);
 

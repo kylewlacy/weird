@@ -29,162 +29,83 @@ impl World {
         self.nodes.iter().map(|(key, value)| (*key, &**value))
     }
 
-    pub fn create_node(&mut self, node: Node, connection_id: ConnectionId) -> NodeId {
-        let new_id = self
+    pub fn append_node(
+        &mut self,
+        node: Node,
+        parent_id: NodeId,
+        connection_id: ConnectionId,
+    ) -> NodeId {
+        let mut event = WorldDidChangeResponse::default();
+        let node_id = self.append_node_inner(node, parent_id, connection_id, &mut event);
+
+        let _ = self.world_did_change_events.send(event);
+
+        node_id
+    }
+
+    fn append_node_inner(
+        &mut self,
+        node: Node,
+        parent_id: NodeId,
+        connection_id: ConnectionId,
+        event: &mut WorldDidChangeResponse,
+    ) -> NodeId {
+        let node_id = self
             .nodes
             .last_key_value()
             .map(|(last_id, _)| NodeId(last_id.0 + 1))
             .expect("world.nodes is empty");
-
-        let mut next_id = new_id;
-        let mut queue: VecDeque<(Node, Option<(NodeId, usize)>)> =
-            [(node, None)].into_iter().collect();
-
-        while let Some((node_tree, parent)) = queue.pop_front() {
-            let id = next_id;
-            next_id = NodeId(next_id.0 + 1);
-
-            self.connection_by_node.insert(id, connection_id);
-            match node_tree {
-                Node::Text(text) => {
-                    self.nodes.insert(id, Arc::new(FlatNode::Text(text)));
-                }
-                Node::Element(element) => {
-                    queue.extend(
-                        element
-                            .children
-                            .into_iter()
-                            .enumerate()
-                            .map(|(index, child)| (child, Some((id, index)))),
-                    );
-
-                    self.nodes
-                        .insert(id, Arc::new(FlatNode::Element(element.element)));
-                    self.children.insert(id, vec![]);
-                }
-            };
-
-            if let Some((parent_id, index)) = parent {
-                self.parents.insert(id, (parent_id, index));
-
-                let parent_children = self
-                    .children
-                    .get_mut(&parent_id)
-                    .expect("parent element does not have a list of children");
-                parent_children.push(id);
-            }
-        }
-
-        new_id
-    }
-
-    pub fn insert_node(&mut self, insert: InsertNode) -> Result<usize, InsertNodeFailed> {
-        let mut event = WorldDidChangeResponse::default();
-
-        let insert_index = self.insert_node_for_event(insert, &mut event)?;
-
-        let _ = self.world_did_change_events.send(event);
-
-        Ok(insert_index)
-    }
-
-    fn insert_node_for_event(
-        &mut self,
-        insert: InsertNode,
-        event: &mut WorldDidChangeResponse,
-    ) -> Result<usize, InsertNodeFailed> {
-        if !self.nodes.contains_key(&insert.child) {
-            return Err(InsertNodeFailed::NodeNotFound);
-        }
-
-        let parent_children = self.children.get_mut(&insert.parent);
-        let Some(parent_children) = parent_children else {
-            if self.nodes.contains_key(&insert.parent) {
-                return Err(InsertNodeFailed::ParentNotFound);
-            } else {
-                return Err(InsertNodeFailed::InvalidParentNodeType);
-            }
-        };
-
-        let num_children = parent_children.len();
-        let insert_index = match insert.offset {
-            InsertNodeOffset::FromStart(offset) => offset,
-            InsertNodeOffset::FromEnd(offset) => {
-                num_children
-                    .checked_sub(offset)
-                    .ok_or(InsertNodeFailed::OffsetOutOfBounds {
-                        offset: insert.offset,
-                        num_children,
-                    })?
-            }
-        };
-        if insert_index > num_children {
-            return Err(InsertNodeFailed::OffsetOutOfBounds {
-                offset: insert.offset,
-                num_children,
+        let mut queue = VecDeque::from_iter([(Some(node_id), node, parent_id)]);
+        while let Some((node_id, node, parent_id)) = queue.pop_front() {
+            let node_id = node_id.unwrap_or_else(|| {
+                self.nodes
+                    .last_key_value()
+                    .map(|(last_id, _)| NodeId(last_id.0 + 1))
+                    .expect("world.nodes is empty")
             });
-        }
 
-        parent_children.insert(insert_index, insert.child);
-        self.parents
-            .insert(insert.child, (insert.parent, insert_index));
+            let (node, children) = node.into_flat_and_children();
+            let node = Arc::new(node);
+            self.nodes.insert(node_id, node.clone());
+            self.connection_by_node.insert(node_id, connection_id);
 
-        let mut queue = VecDeque::from_iter([insert.child]);
-        while let Some(id) = queue.pop_front() {
-            let (parent_id, parent_index) = self.parents[&id];
-            let before_sibling_id = if parent_index + 1 < num_children {
-                Some(self.children[&parent_id][parent_index + 1])
-            } else {
-                None
-            };
-            event.changes.push(WorldChange::Created(CreatedNodeChange {
-                id,
-                parent_id,
-                before_sibling_id,
-                node: self.nodes[&id].clone(),
-            }));
+            let parent_children = self
+                .children
+                .get_mut(&parent_id)
+                .unwrap_or_else(|| panic!("node {parent_id:?} cannot have children"));
+            let parent_index = parent_children.len();
 
-            if let Some(children) = self.children.get(&id) {
-                queue.extend(children.iter().copied());
+            parent_children.push(node_id);
+            self.parents.insert(node_id, (parent_id, parent_index));
+
+            if let Some(children) = children {
+                self.children.insert(node_id, vec![]);
+
+                queue.extend(children.into_iter().map(|child| (None, child, node_id)));
             }
+
+            event.changes.push(WorldChange::Created(CreatedNodeChange {
+                id: node_id,
+                parent_id,
+                before_sibling_id: None,
+                node,
+            }));
         }
 
-        Ok(insert_index)
+        node_id
     }
 
-    pub fn remove_node(&mut self, node_id: NodeId) -> Result<NodeId, RemoveNodeFailed> {
-        self.connection_by_node.remove(&node_id);
-
-        if !self.nodes.contains_key(&node_id) {
-            return Err(RemoveNodeFailed::NodeNotFound);
-        }
-
-        let (parent_id, parent_index) = self
-            .parents
-            .get(&node_id)
-            .ok_or(RemoveNodeFailed::NoParentNode)?;
-
-        let parent_children = self
-            .children
-            .get_mut(parent_id)
-            .unwrap_or_else(|| panic!("children not found for parent {parent_id:?}"));
-        parent_children.remove(*parent_index);
+    pub fn remove_node(&mut self, node_id: NodeId) {
+        let mut event = WorldDidChangeResponse::default();
+        self.remove_nodes_inner(VecDeque::from_iter([node_id]), &mut event);
 
         let num_receivers = self.world_did_change_events.receiver_count();
         if num_receivers != 0 {
             tracing::debug!(num_receivers, "broadcasting change event");
-            let mut event = WorldDidChangeResponse::default();
-
-            event
-                .changes
-                .push(WorldChange::Deleted(DeletedNodeChange { id: node_id }));
-
             let _ = self.world_did_change_events.send(event);
         } else {
             tracing::debug!("no listeners, skipping change event");
         }
-
-        Ok(*parent_id)
     }
 
     fn remove_nodes_inner(
@@ -239,58 +160,6 @@ impl World {
                 self.parents.insert(*child_id, (parent_id, index));
             }
         }
-    }
-
-    fn append_node_inner(
-        &mut self,
-        node: Node,
-        parent_id: NodeId,
-        connection_id: ConnectionId,
-        event: &mut WorldDidChangeResponse,
-    ) -> NodeId {
-        let node_id = self
-            .nodes
-            .last_key_value()
-            .map(|(last_id, _)| NodeId(last_id.0 + 1))
-            .expect("world.nodes is empty");
-        let mut queue = VecDeque::from_iter([(Some(node_id), node, parent_id)]);
-        while let Some((node_id, node, parent_id)) = queue.pop_front() {
-            let node_id = node_id.unwrap_or_else(|| {
-                self.nodes
-                    .last_key_value()
-                    .map(|(last_id, _)| NodeId(last_id.0 + 1))
-                    .expect("world.nodes is empty")
-            });
-
-            let (node, children) = node.into_flat_and_children();
-            let node = Arc::new(node);
-            self.nodes.insert(node_id, node.clone());
-            self.connection_by_node.insert(node_id, connection_id);
-
-            let parent_children = self
-                .children
-                .get_mut(&parent_id)
-                .unwrap_or_else(|| panic!("node {parent_id:?} cannot have children"));
-            let parent_index = parent_children.len();
-
-            parent_children.push(node_id);
-            self.parents.insert(node_id, (parent_id, parent_index));
-
-            if let Some(children) = children {
-                self.children.insert(node_id, vec![]);
-
-                queue.extend(children.into_iter().map(|child| (None, child, node_id)));
-            }
-
-            event.changes.push(WorldChange::Created(CreatedNodeChange {
-                id: node_id,
-                parent_id,
-                before_sibling_id: None,
-                node,
-            }));
-        }
-
-        node_id
     }
 
     pub fn set_node_children(
@@ -880,23 +749,6 @@ impl FlatElement {
     }
 }
 
-pub struct InsertNode {
-    pub parent: NodeId,
-    pub child: NodeId,
-    pub offset: InsertNodeOffset,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum InsertNodeOffset {
-    FromStart(usize),
-    FromEnd(usize),
-}
-
-impl InsertNodeOffset {
-    pub const BEGINNING: Self = InsertNodeOffset::FromStart(0);
-    pub const END: Self = InsertNodeOffset::FromEnd(0);
-}
-
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Event {
     pub target_id: Option<String>,
@@ -933,23 +785,6 @@ pub struct TriggerEvent {
     target_node_id: NodeId,
     event: String,
     params: serde_json::Value,
-}
-
-#[derive(Debug)]
-pub enum InsertNodeFailed {
-    NodeNotFound,
-    ParentNotFound,
-    OffsetOutOfBounds {
-        offset: InsertNodeOffset,
-        num_children: usize,
-    },
-    InvalidParentNodeType,
-}
-
-#[derive(Debug)]
-pub enum RemoveNodeFailed {
-    NodeNotFound,
-    NoParentNode,
 }
 
 #[derive(Debug)]

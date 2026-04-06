@@ -3,8 +3,8 @@ use std::sync::Arc;
 use pretty_assertions::assert_eq;
 use weird_core::world::{
     Connection, ConnectionId, CreatedNodeChange, DeletedNodeChange, ElementNodeUpdate, FlatNode,
-    InsertNode, MovedNodeChange, Node, NodeId, NodeUpdate, ROOT_NODE_ID, TextNodeUpdate,
-    UpdatedNodeChange, World, WorldChange, WorldDidChangeResponse,
+    MovedNodeChange, Node, NodeId, NodeUpdate, ROOT_NODE_ID, TextNodeUpdate, UpdatedNodeChange,
+    World, WorldChange, WorldDidChangeResponse,
 };
 
 pub async fn render(
@@ -121,14 +121,11 @@ pub fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Connectio
     let mut world = World::default();
     let conn = world.create_connection();
 
-    let window_id = world.create_node(Node::element("Window").children(children), conn.id);
-    world
-        .insert_node(InsertNode {
-            parent: ROOT_NODE_ID,
-            child: window_id,
-            offset: weird_core::world::InsertNodeOffset::END,
-        })
-        .unwrap();
+    let window_id = world.append_node(
+        Node::element("Window").children(children),
+        ROOT_NODE_ID,
+        conn.id,
+    );
 
     (world, conn, window_id)
 }
