@@ -14,32 +14,87 @@ export const Input = defineElement(
     dom: HTMLInputElement;
     domSlot = null;
 
+    #beforeChange: InputState | null = null;
+    #afterChange: InputState | null = null;
+
     constructor(attrs: InputAttributes, ctx: WeirdElementContext) {
       this.dom = h("input", {
         className: clsx(
           "px-1 bg-white border-2 border-black shadow-sm focus-visible:shadow-sm/50 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:shadow-md",
         ),
       });
-      this.dom.addEventListener("beforeinput", (e) => {
-        const prefix = this.dom.value.substring(
-          0,
-          this.dom.selectionStart ?? undefined,
-        );
-        const suffix =
-          this.dom.selectionEnd != null
-            ? this.dom.value.substring(this.dom.selectionEnd)
-            : "";
-        const newValue = prefix + (e.data ?? "") + suffix;
-        ctx.triggerEvent("change", { value: newValue });
-        e.preventDefault();
+      this.dom.addEventListener("beforeinput", () => {
+        if (this.dom.selectionStart == null || this.dom.selectionEnd == null) {
+          console.warn("expected selectionStart / selectionEnd to not be null");
+          return;
+        }
+        this.#beforeChange = {
+          start: this.dom.selectionStart,
+          end: this.dom.selectionEnd,
+          direction: this.dom.selectionDirection,
+          value: this.dom.value,
+        };
+      });
+      this.dom.addEventListener("input", () => {
+        if (this.dom.selectionStart == null || this.dom.selectionEnd == null) {
+          console.warn("expected selectionStart / selectionEnd to not be null");
+          return;
+        }
+        this.#afterChange = {
+          start: this.dom.selectionStart,
+          end: this.dom.selectionEnd,
+          direction: this.dom.selectionDirection,
+          value: this.dom.value,
+        };
+
+        ctx.triggerEvent("change", { value: this.dom.value });
+
+        if (this.#beforeChange != null) {
+          this.dom.value = this.#beforeChange.value;
+          this.dom.setSelectionRange(
+            this.#beforeChange.start,
+            this.#beforeChange.end,
+            this.#beforeChange.direction ?? undefined,
+          );
+        }
       });
 
       this.updateAttributes(attrs);
     }
 
     updateAttributes(attrs: InputAttributes) {
-      this.dom.value = attrs.value ?? "";
+      const newValue = attrs.value ?? "";
+      if (newValue != this.dom.value) {
+        this.dom.value = newValue;
+
+        if (
+          newValue === this.#afterChange?.value ||
+          (newValue.length === this.#afterChange?.value.length &&
+            newValue !== this.#beforeChange?.value)
+        ) {
+          this.dom.setSelectionRange(
+            this.#afterChange.start,
+            this.#afterChange.end,
+            this.#afterChange.direction ?? undefined,
+          );
+        } else if (newValue.length === this.#beforeChange?.value.length) {
+          this.dom.setSelectionRange(
+            this.#beforeChange.start,
+            this.#beforeChange.end,
+            this.#beforeChange.direction ?? undefined,
+          );
+        }
+      }
       this.dom.placeholder = attrs.placeholder ?? "";
     }
   },
 );
+
+interface InputState {
+  start: number;
+  end: number;
+  direction: SelectionDirection | null;
+  value: string;
+}
+
+type SelectionDirection = "forward" | "backward" | "none";
