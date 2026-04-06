@@ -14,7 +14,7 @@
 
 @theme {
   --color-wallpaper-primary: var(--color-orange-100);
-  --color-wallpaper-secondary: var(--color-taupe-900);
+  --color-wallpaper-secondary: var(--color-orange-200);
   --shadow-*: initial;
   --shadow-xs: 1px 1px rgb(0 0 0 / 0.125);
   --shadow-sm: 2px 2px rgb(0 0 0 / 0.25);
@@ -24,19 +24,19 @@
 }
 
 :root {
-  --bg-wallpaper-pattern-size: 1.1px;
+  --bg-wallpaper-pattern-size: 4px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root :not(:where([data-theme="light"], [data-theme="light"] *)) {
     --color-wallpaper-primary: var(--color-taupe-900);
-    --color-wallpaper-secondary: var(--color-taupe-500);
+    --color-wallpaper-secondary: var(--color-taupe-700);
   }
 }
 
 :root :where([data-theme="dark"], [data-theme="dark"] *) {
   --color-wallpaper-primary: var(--color-taupe-900);
-  --color-wallpaper-secondary: var(--color-taupe-500);
+  --color-wallpaper-secondary: var(--color-taupe-700);
 }
 
 @utility bg-wallpaper {
@@ -50,10 +50,10 @@
       var(--color-wallpaper-secondary) var(--bg-wallpaper-pattern-size),
       var(--color-wallpaper-primary) var(--bg-wallpaper-pattern-size)
     );
-  background-size: 48px 48px;
+  background-size: 96px 96px;
   background-position:
     0 0,
-    24px 24px;
+    48px 48px;
 }
 
 @custom-variant childless {
