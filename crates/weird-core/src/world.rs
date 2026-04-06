@@ -318,35 +318,48 @@ impl World {
         self.world_did_change_events.subscribe()
     }
 
-    pub async fn trigger_event(&self, event: TriggerEvent) -> Result<(), TriggerEventFailed> {
+    pub async fn trigger_event(&mut self, event: TriggerEvent) -> Result<(), TriggerEventFailed> {
         let connection = self
             .connection_by_node
             .get(&event.target_node_id)
-            .and_then(|connection_id| self.connections.get(connection_id));
-        let Some(connection) = connection else {
+            .and_then(|connection_id| Some((self.connections.get(connection_id)?, *connection_id)));
+        let Some((connection, connection_id)) = connection else {
             return Err(TriggerEventFailed::NoConnectionForNode);
         };
 
-        let target_id = self
-            .nodes
-            .get(&event.target_node_id)
-            .and_then(|node| match &**node {
-                FlatNode::Element(element) => element.attributes.get("id"),
-                FlatNode::Text(_) => None,
-            })
-            .and_then(|id| id.as_str())
-            .map(ToString::to_string);
-        let event = Event {
-            event: event.event,
-            params: event.params,
-            target_node_id: event.target_node_id,
-            target_id,
-        };
+        let target_node = self.nodes.get(&event.target_node_id);
+        if event.event == "close"
+            && let Some(target_node) = target_node
+            && let FlatNode::Element(el) = &**target_node
+            && el.tag == "Window"
+            && self
+                .parents
+                .get(&event.target_node_id)
+                .is_some_and(|(parent_id, _)| *parent_id == ROOT_NODE_ID)
+        {
+            // Window.close event
 
-        connection
-            .event_tx
-            .send(event)
-            .map_err(|_| TriggerEventFailed::NoConnectionForNode)?;
+            // Close the connection by removing it
+            self.connections.remove(&connection_id);
+
+            // Remove the window node
+            self.remove_node(event.target_node_id);
+        } else {
+            let target_id = target_node
+                .and_then(|node| node.get_id())
+                .map(ToString::to_string);
+            let event = Event {
+                event: event.event,
+                params: event.params,
+                target_node_id: event.target_node_id,
+                target_id,
+            };
+
+            connection
+                .event_tx
+                .send(event)
+                .map_err(|_| TriggerEventFailed::NoConnectionForNode)?;
+        }
 
         Ok(())
     }

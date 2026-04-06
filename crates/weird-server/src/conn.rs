@@ -75,7 +75,7 @@ pub async fn handle_conn(
                 );
             }
             Request::TriggerEvent(trigger_event) => {
-                let world = state.world.read().await;
+                let mut world = state.world.write().await;
 
                 let result = world.trigger_event(trigger_event).await.map_or_else(
                     |error| {

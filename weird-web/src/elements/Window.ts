@@ -4,6 +4,7 @@ import {
   h,
   type Children,
   type ElementProperties,
+  type WeirdElementContext,
 } from "./utils.ts";
 import clsx from "clsx";
 
@@ -29,6 +30,7 @@ export const Window = defineElement(
     domSlot: HTMLDivElement;
     #maximizeButton: HTMLButtonElement;
     #maximizeButtonTextNode: Text;
+    #closeButton: HTMLButtonElement;
     #isMaximized: boolean = false;
     #titleNode: Text;
     #left: number = 0;
@@ -38,7 +40,7 @@ export const Window = defineElement(
       this.moveWindowTo({ left: this.#left, top: this.#top });
     };
 
-    constructor(attrs: WindowAttributes) {
+    constructor(attrs: WindowAttributes, ctx: WeirdElementContext) {
       const zIndex = topZIndex++;
 
       let windowTitlebar: HTMLDivElement;
@@ -73,6 +75,7 @@ export const Window = defineElement(
               {},
               (this.#maximizeButtonTextNode = document.createTextNode("^")),
             )),
+            (this.#closeButton = titlebarButtonComponent({}, "X")),
           ),
         )),
         h("div", {}, (this.domSlot = h("div", {}))),
@@ -139,6 +142,14 @@ export const Window = defineElement(
       this.#maximizeButton.addEventListener("click", (event) => {
         event.preventDefault();
         this.#toggleMaximized();
+      });
+
+      this.#closeButton.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      this.#closeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        ctx.triggerEvent("close", {});
       });
 
       window.addEventListener("resize", this.#windowResizeListener);
