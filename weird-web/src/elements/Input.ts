@@ -59,6 +59,10 @@ export const Input = defineElement(
         }
       });
 
+      // Explicitly disable completions from 1Password extension:
+      // https://developer.1password.com/docs/web/compatible-website-design/
+      this.dom.dataset["1pIgnore"] = "";
+
       this.updateAttributes(attrs);
     }
 
