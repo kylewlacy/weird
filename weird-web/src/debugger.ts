@@ -7,25 +7,16 @@ import type {
 import { ROOT_NODE_ID } from "./world.ts";
 import { ELEMENTS } from "./elements/index.ts";
 import clsx from "clsx";
-import { buttonComponent } from "./elements/Button.ts";
 import unreachable from "ts-unreachable";
 
 export class Debugger {
   #tree: HTMLElement;
   #nodes: Record<NodeId, TreeNode>;
 
-  #view: HTMLElement;
-  #element: HTMLElement;
+  #dom: HTMLElement;
 
   constructor() {
     const rootNode = treeNode({ tag: "World", attributes: {} }, null);
-
-    const closeButton = buttonComponent(
-      {
-        popoverTargetAction: "hide",
-      },
-      "Close",
-    );
 
     this.#nodes = { [ROOT_NODE_ID]: rootNode };
     this.#tree = h(
@@ -35,36 +26,11 @@ export class Debugger {
       },
       rootNode.dom,
     );
-    this.#view = h(
-      "div",
-      {
-        className: clsx(
-          "bg-orange-200 p-2 border border-orange-900 fixed m-0 inset-auto position-area-bottom-span-left max-h-full w-2/5 shadow-md dark:bg-amber-900 dark:border-amber-600 dark:shadow-lg dark:text-white",
-        ),
-        popover: "manual",
-        style: {
-          positionArea: "bottom span-left",
-        },
-      },
-      closeButton,
-      h("div", {}, "Tree", this.#tree),
-    );
-    this.#element = h(
-      "div",
-      {},
-      buttonComponent(
-        {
-          popoverTargetElement: this.#view,
-        },
-        "Debugger",
-      ),
-      this.#view,
-    );
-    closeButton.popoverTargetElement = this.#view;
+    this.#dom = h("div", {}, "Tree", this.#tree);
   }
 
   mount(element: HTMLElement) {
-    element.appendChild(this.#element);
+    element.appendChild(this.#dom);
   }
 
   handleWorldDidChangeEvent(event: WorldDidChangeResponse) {
@@ -243,7 +209,7 @@ type TreeNode =
 function treeNode(node: FlatNode, parentId: NodeId | null): TreeNode {
   // Inspired by: https://iamkate.com/code/tree-views/
   const styleLi = clsx(
-    "block relative pl-9 border-l-2 border-gray-400 last:border-transparent before:content-[''] before:block before:absolute before:-top-3 before:-left-0.5 before:w-6.5 before:h-6.25 before:border-gray-400 before:border-b-2 before:border-l-2",
+    "block relative pl-9 border-l-2 border-gray-400 last:border-transparent before:content-[''] before:block before:absolute before:-top-3 before:-left-0.5 before:w-6.5 before:h-6.25 before:border-gray-400 before:border-b-2 before:border-l-2 dark:border-gray-600 dark:before:border-gray-600",
   );
   const styleUl = clsx("-ml-3.5 pl-0");
 
@@ -274,7 +240,7 @@ function treeNode(node: FlatNode, parentId: NodeId | null): TreeNode {
           h(
             "span",
             {
-              className: clsx("text-xs text-gray-600 ml-2"),
+              className: clsx("text-xs ml-2 text-gray-600 dark:text-gray-400"),
             },
             JSON.stringify(node),
           ),
