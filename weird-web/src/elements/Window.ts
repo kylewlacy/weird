@@ -167,7 +167,7 @@ export const Window = defineElement(
         this.dom.parentElement ?? document.body
       ).getBoundingClientRect();
 
-      const leftMin = Math.min(0, 40 - windowRect.width);
+      const leftMin = Math.min(0, 80 - windowRect.width);
       const leftMax = Math.max(0, parentRect.width - 40);
       const topMin = -10;
       const topMax = Math.max(0, parentRect.height - 20);
