@@ -41,34 +41,8 @@ export const Window = defineElement(
     constructor(attrs: WindowAttributes) {
       const zIndex = topZIndex++;
 
-      this.domSlot = h("div");
-      this.#titleNode = document.createTextNode("");
-      this.#maximizeButtonTextNode = document.createTextNode("^");
-      this.#maximizeButton = titlebarButtonComponent(
-        {},
-        this.#maximizeButtonTextNode,
-      );
-      const windowTitlebar = h(
-        "div",
-        {
-          className: clsx(
-            "border-b-2 border-black touch-none select-none dark:border-zinc-300",
-          ),
-        },
-        h(
-          "div",
-          {
-            className: clsx("flex items-center"),
-          },
-          h(
-            "div",
-            { className: clsx("flex-1 px-1 text-nowrap") },
-            this.#titleNode,
-          ),
-          this.#maximizeButton,
-        ),
-      );
-      const windowEl = h(
+      let windowTitlebar: HTMLDivElement;
+      this.dom = h(
         "div",
         {
           className: clsx(
@@ -78,10 +52,31 @@ export const Window = defineElement(
             zIndex: zIndex.toString(),
           },
         },
-        windowTitlebar,
-        h("div", {}, this.domSlot),
+        (windowTitlebar = h(
+          "div",
+          {
+            className: clsx(
+              "border-b-2 border-black touch-none select-none dark:border-zinc-300",
+            ),
+          },
+          h(
+            "div",
+            {
+              className: clsx("flex items-center"),
+            },
+            h(
+              "div",
+              { className: clsx("flex-1 px-1 text-nowrap") },
+              (this.#titleNode = document.createTextNode("")),
+            ),
+            (this.#maximizeButton = titlebarButtonComponent(
+              {},
+              (this.#maximizeButtonTextNode = document.createTextNode("^")),
+            )),
+          ),
+        )),
+        h("div", {}, (this.domSlot = h("div", {}))),
       );
-      this.dom = windowEl;
 
       let pointerMoveState: WindowMoveState | undefined;
 
@@ -95,9 +90,9 @@ export const Window = defineElement(
           return;
         }
         const windowLeft =
-          event.clientX - windowEl.offsetLeft - pointerMoveState.offsetX;
+          event.clientX - this.dom.offsetLeft - pointerMoveState.offsetX;
         const windowTop =
-          event.clientY - windowEl.offsetTop - pointerMoveState.offsetY;
+          event.clientY - this.dom.offsetTop - pointerMoveState.offsetY;
         this.moveWindowTo({ left: windowLeft, top: windowTop });
       };
       windowTitlebar.addEventListener("pointerdown", (event) => {
@@ -105,10 +100,10 @@ export const Window = defineElement(
           return;
         }
 
-        windowEl.classList.add("weird-window-dragging");
+        this.dom.classList.add("weird-window-dragging");
 
-        const windowRect = windowEl.getBoundingClientRect();
-        const parentRect = windowEl.parentElement?.getBoundingClientRect();
+        const windowRect = this.dom.getBoundingClientRect();
+        const parentRect = this.dom.parentElement?.getBoundingClientRect();
         pointerMoveState = {
           offsetX: event.clientX - windowRect.left + (parentRect?.left ?? 0),
           offsetY: event.clientY - windowRect.top + (parentRect?.top ?? 0),
@@ -116,12 +111,12 @@ export const Window = defineElement(
 
         windowTitlebar.setPointerCapture(event.pointerId);
 
-        const currentZIndex = Number(windowEl.style.zIndex);
+        const currentZIndex = Number(this.dom.style.zIndex);
         if (Number.isNaN(currentZIndex) || currentZIndex <= topZIndex) {
           if (currentZIndex < topZIndex) {
             topZIndex++;
           }
-          windowEl.style.zIndex = topZIndex.toString();
+          this.dom.style.zIndex = topZIndex.toString();
         }
 
         event.preventDefault();
@@ -133,7 +128,7 @@ export const Window = defineElement(
         windowTitlebar.addEventListener("pointermove", onPointerMove);
       });
       windowTitlebar.addEventListener("lostpointercapture", () => {
-        windowEl.classList.remove("weird-window-dragging");
+        this.dom.classList.remove("weird-window-dragging");
         pointerMoveState = undefined;
         windowTitlebar.removeEventListener("pointermove", onPointerMove);
       });
