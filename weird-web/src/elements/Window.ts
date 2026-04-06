@@ -62,6 +62,11 @@ export const Window = defineElement(
       let pointerMoveState: WindowMoveState | undefined;
 
       const onPointerMove = (event: PointerEvent) => {
+        if (event.button > 0) {
+          windowTitlebar.releasePointerCapture(event.pointerId);
+          return;
+        }
+
         if (pointerMoveState == null) {
           return;
         }
@@ -72,10 +77,15 @@ export const Window = defineElement(
         this.moveWindowTo({ left: windowLeft, top: windowTop });
       };
       windowTitlebar.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+
         const windowRect = windowEl.getBoundingClientRect();
+        const parentRect = windowEl.parentElement?.getBoundingClientRect();
         pointerMoveState = {
-          offsetX: event.clientX - windowRect.left,
-          offsetY: event.clientY - windowRect.top,
+          offsetX: event.clientX - windowRect.left + (parentRect?.left ?? 0),
+          offsetY: event.clientY - windowRect.top + (parentRect?.top ?? 0),
         };
 
         windowTitlebar.setPointerCapture(event.pointerId);
@@ -87,6 +97,8 @@ export const Window = defineElement(
           }
           windowEl.style.zIndex = topZIndex.toString();
         }
+
+        event.preventDefault();
       });
       windowTitlebar.addEventListener("pointerup", (event) => {
         windowTitlebar.releasePointerCapture(event.pointerId);
@@ -110,12 +122,14 @@ export const Window = defineElement(
 
     moveWindowTo(pos: { left: number; top: number }) {
       const windowRect = this.dom.getBoundingClientRect();
-      const bodyRect = document.body.getBoundingClientRect();
+      const parentRect = (
+        this.dom.parentElement ?? document.body
+      ).getBoundingClientRect();
 
       const leftMin = Math.min(0, 40 - windowRect.width);
-      const leftMax = Math.max(0, bodyRect.width - 40);
+      const leftMax = Math.max(0, parentRect.width - 40);
       const topMin = -10;
-      const topMax = Math.max(0, bodyRect.height - 20);
+      const topMax = Math.max(0, parentRect.height - 20);
       const left = Math.min(leftMax, Math.max(leftMin, pos.left));
       const top = Math.min(topMax, Math.max(topMin, pos.top));
 

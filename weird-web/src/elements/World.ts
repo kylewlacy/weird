@@ -9,7 +9,7 @@ export const World = defineElement(
     domSlot: HTMLDivElement;
     constructor() {
       this.dom = this.domSlot = h("div", {
-        className: clsx("relative"),
+        className: clsx("relative size-full z-0"),
       });
     }
   },
