@@ -21,7 +21,7 @@ const WindowAttributes = z.object({
 });
 type WindowAttributes = z.output<typeof WindowAttributes>;
 
-const DEFAULT_WINDOW_TITLE = "Untitled Window" as const;
+const DEFAULT_WINDOW_TITLE = "(untitled)" as const;
 
 export const Window = defineElement(
   WindowAttributes,
