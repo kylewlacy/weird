@@ -65,6 +65,10 @@
   &.weird-window-dragging {
     transition-property: width, height;
   }
+
+  &.weird-window-resizing {
+    transition-property: scale, rotate;
+  }
 }
 
 @custom-variant childless {

@@ -10,10 +10,17 @@ import clsx from "clsx";
 
 let topZIndex: number = 2;
 
-interface WindowMoveState {
+type PointerCaptureState = {
   offsetX: number;
   offsetY: number;
-}
+  captured: HTMLElement;
+} & (
+  | { type: "move" }
+  | {
+      type: "resize";
+      direction: ResizeDirection;
+    }
+);
 
 const WindowAttributes = z.object({
   title: z.string().optional(),
@@ -23,6 +30,9 @@ const WindowAttributes = z.object({
 type WindowAttributes = z.output<typeof WindowAttributes>;
 
 const DEFAULT_WINDOW_TITLE = "(untitled)" as const;
+
+const RESIZE_DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+type ResizeDirection = (typeof RESIZE_DIRECTIONS)[number];
 
 export const Window = defineElement(
   WindowAttributes,
@@ -37,6 +47,7 @@ export const Window = defineElement(
     #staleOverlay: HTMLDivElement;
     #left: number = 0;
     #top: number = 0;
+    #resizeHandles: Record<ResizeDirection, HTMLDivElement>;
 
     #windowResizeListener = (): void => {
       this.moveWindowTo({ left: this.#left, top: this.#top });
@@ -46,6 +57,8 @@ export const Window = defineElement(
       const zIndex = topZIndex++;
 
       let windowTitlebar: HTMLDivElement;
+      const resizeHandles: Partial<Record<ResizeDirection, HTMLDivElement>> =
+        {};
       this.dom = h(
         "div",
         {
@@ -90,9 +103,44 @@ export const Window = defineElement(
             className: clsx("w-full h-full"),
           })),
         ),
+        (resizeHandles.N = h("div", {
+          className: clsx("w-full -my-4 h-4 absolute top-0 cursor-n-resize"),
+        })),
+        (resizeHandles.NE = h("div", {
+          className: clsx(
+            "size-4 -m-4 absolute top-0 right-0 cursor-ne-resize",
+          ),
+        })),
+        (resizeHandles.E = h("div", {
+          className: clsx(
+            "h-full w-4 -mx-4 absolute top-0 right-0 cursor-e-resize",
+          ),
+        })),
+        (resizeHandles.SE = h("div", {
+          className: clsx(
+            "size-4 -m-4 absolute bottom-0 right-0 cursor-se-resize",
+          ),
+        })),
+        (resizeHandles.S = h("div", {
+          className: clsx("w-full -my-4 h-4 absolute bottom-0 cursor-s-resize"),
+        })),
+        (resizeHandles.SW = h("div", {
+          className: clsx(
+            "size-4 -m-4 absolute bottom-0 left-0 cursor-sw-resize",
+          ),
+        })),
+        (resizeHandles.W = h("div", {
+          className: clsx(
+            "h-full w-4 -mx-4 absolute top-0 left-0 cursor-w-resize",
+          ),
+        })),
+        (resizeHandles.NW = h("div", {
+          className: clsx("size-4 -m-4 absolute top-0 left-0 cursor-nw-resize"),
+        })),
       );
+      this.#resizeHandles = finishResizeHandles(resizeHandles);
 
-      let pointerMoveState: WindowMoveState | undefined;
+      let pointerCaptureState: PointerCaptureState | undefined;
 
       const onPointerMove = (event: PointerEvent) => {
         if (event.button > 0) {
@@ -100,15 +148,76 @@ export const Window = defineElement(
           return;
         }
 
-        if (pointerMoveState == null) {
+        if (pointerCaptureState == null) {
           return;
         }
-        const windowLeft =
-          event.clientX - this.dom.offsetLeft - pointerMoveState.offsetX;
-        const windowTop =
-          event.clientY - this.dom.offsetTop - pointerMoveState.offsetY;
-        this.moveWindowTo({ left: windowLeft, top: windowTop });
+
+        switch (pointerCaptureState.type) {
+          case "move": {
+            const windowLeft =
+              event.clientX - this.dom.offsetLeft - pointerCaptureState.offsetX;
+            const windowTop =
+              event.clientY - this.dom.offsetTop - pointerCaptureState.offsetY;
+            this.moveWindowTo({ left: windowLeft, top: windowTop });
+            break;
+          }
+          case "resize": {
+            const windowRect = this.dom.getBoundingClientRect();
+            let windowX: number | undefined;
+            let windowY: number | undefined;
+            let windowWidth: number | undefined;
+            let windowHeight: number | undefined;
+
+            switch (pointerCaptureState.direction) {
+              case "N":
+              case "NE":
+              case "NW":
+                windowHeight = windowRect.bottom - event.clientY;
+                windowY = event.clientY;
+                break;
+              case "S":
+              case "SE":
+              case "SW":
+                windowHeight = event.clientY - windowRect.top;
+                break;
+              case "E":
+              case "W":
+                break;
+            }
+            switch (pointerCaptureState.direction) {
+              case "E":
+              case "NE":
+              case "SE":
+                windowWidth = event.clientX - windowRect.left;
+                break;
+              case "W":
+              case "NW":
+              case "SW":
+                windowWidth = windowRect.right - Math.round(event.clientX);
+                windowX = Math.round(event.clientX);
+                break;
+              case "N":
+              case "S":
+                break;
+            }
+
+            if (windowWidth != null) {
+              this.dom.style.width = `${windowWidth}px`;
+            }
+            if (windowHeight != null) {
+              this.dom.style.height = `${windowHeight}px`;
+            }
+            if (windowX != null || windowY != null) {
+              this.moveWindowTo({
+                left: windowX ?? this.#left,
+                top: windowY ?? this.#top,
+              });
+            }
+            break;
+          }
+        }
       };
+
       windowTitlebar.addEventListener("pointerdown", (event) => {
         if (event.button !== 0) {
           return;
@@ -118,12 +227,13 @@ export const Window = defineElement(
 
         const windowRect = this.dom.getBoundingClientRect();
         const parentRect = this.dom.parentElement?.getBoundingClientRect();
-        pointerMoveState = {
+        windowTitlebar.setPointerCapture(event.pointerId);
+        pointerCaptureState = {
+          type: "move",
           offsetX: event.clientX - windowRect.left + (parentRect?.left ?? 0),
           offsetY: event.clientY - windowRect.top + (parentRect?.top ?? 0),
+          captured: windowTitlebar,
         };
-
-        windowTitlebar.setPointerCapture(event.pointerId);
 
         const currentZIndex = Number(this.dom.style.zIndex);
         if (Number.isNaN(currentZIndex) || currentZIndex <= topZIndex) {
@@ -143,9 +253,42 @@ export const Window = defineElement(
       });
       windowTitlebar.addEventListener("lostpointercapture", () => {
         this.dom.classList.remove("weird-window-dragging");
-        pointerMoveState = undefined;
+        pointerCaptureState = undefined;
         windowTitlebar.removeEventListener("pointermove", onPointerMove);
       });
+
+      for (const direction of RESIZE_DIRECTIONS) {
+        const resizeHandle = this.#resizeHandles[direction];
+        resizeHandle.addEventListener("pointerdown", (event: PointerEvent) => {
+          if (event.button !== 0) {
+            return;
+          }
+
+          this.dom.classList.add("weird-window-resizing");
+
+          const windowRect = this.dom.getBoundingClientRect();
+          const parentRect = this.dom.parentElement?.getBoundingClientRect();
+          resizeHandle.setPointerCapture(event.pointerId);
+          pointerCaptureState = {
+            type: "resize",
+            direction,
+            offsetX: event.clientX - windowRect.left + (parentRect?.left ?? 0),
+            offsetY: event.clientY - windowRect.top + (parentRect?.top ?? 0),
+            captured: resizeHandle,
+          };
+        });
+        resizeHandle.addEventListener("pointerup", (event) => {
+          resizeHandle.releasePointerCapture(event.pointerId);
+        });
+        resizeHandle.addEventListener("gotpointercapture", () => {
+          resizeHandle.addEventListener("pointermove", onPointerMove);
+        });
+        resizeHandle.addEventListener("lostpointercapture", () => {
+          this.dom.classList.remove("weird-window-resizing");
+          pointerCaptureState = undefined;
+          resizeHandle.removeEventListener("pointermove", onPointerMove);
+        });
+      }
 
       this.#maximizeButton.addEventListener("pointerdown", (event) => {
         event.stopPropagation();
@@ -239,4 +382,32 @@ function titlebarButtonComponent(
     },
     ...children,
   );
+}
+
+function finishResizeHandles(
+  resizeHandles: Partial<Record<ResizeDirection, HTMLDivElement>>,
+): Record<ResizeDirection, HTMLDivElement> {
+  if (
+    resizeHandles.N != null &&
+    resizeHandles.NE != null &&
+    resizeHandles.E != null &&
+    resizeHandles.SE != null &&
+    resizeHandles.S != null &&
+    resizeHandles.SW != null &&
+    resizeHandles.W != null &&
+    resizeHandles.NW != null
+  ) {
+    return {
+      N: resizeHandles.N,
+      NE: resizeHandles.NE,
+      E: resizeHandles.E,
+      SE: resizeHandles.SE,
+      S: resizeHandles.S,
+      SW: resizeHandles.SW,
+      W: resizeHandles.W,
+      NW: resizeHandles.NW,
+    };
+  } else {
+    throw new Error("failed to initialize resizeHandles");
+  }
 }
