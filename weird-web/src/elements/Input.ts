@@ -35,28 +35,20 @@ export const Input = defineElement(
           value: this.dom.value,
         };
       });
-      this.dom.addEventListener("input", () => {
-        if (this.dom.selectionStart == null || this.dom.selectionEnd == null) {
-          console.warn("expected selectionStart / selectionEnd to not be null");
+      this.dom.addEventListener("input", (e) => {
+        if (!(e instanceof InputEvent)) {
+          console.warn("unexpected event type for input handler", e);
           return;
         }
-        this.#afterChange = {
-          start: this.dom.selectionStart,
-          end: this.dom.selectionEnd,
-          direction: this.dom.selectionDirection,
-          value: this.dom.value,
-        };
-
-        ctx.triggerEvent("change", { value: this.dom.value });
-
-        if (this.#beforeChange != null) {
-          this.dom.value = this.#beforeChange.value;
-          this.dom.setSelectionRange(
-            this.#beforeChange.start,
-            this.#beforeChange.end,
-            this.#beforeChange.direction ?? undefined,
-          );
+        if (e.isComposing) {
+          // Input is being composed (IME), handle with `compositionend` instead
+          return;
         }
+
+        this.#inputDidChange(ctx);
+      });
+      this.dom.addEventListener("compositionend", () => {
+        this.#inputDidChange(ctx);
       });
 
       // Explicitly disable completions from 1Password extension:
@@ -64,6 +56,30 @@ export const Input = defineElement(
       this.dom.dataset["1pIgnore"] = "";
 
       this.updateAttributes(attrs);
+    }
+
+    #inputDidChange(ctx: WeirdElementContext) {
+      if (this.dom.selectionStart == null || this.dom.selectionEnd == null) {
+        console.warn("expected selectionStart / selectionEnd to not be null");
+        return;
+      }
+      this.#afterChange = {
+        start: this.dom.selectionStart,
+        end: this.dom.selectionEnd,
+        direction: this.dom.selectionDirection,
+        value: this.dom.value,
+      };
+
+      ctx.triggerEvent("change", { value: this.dom.value });
+
+      if (this.#beforeChange != null) {
+        this.dom.value = this.#beforeChange.value;
+        this.dom.setSelectionRange(
+          this.#beforeChange.start,
+          this.#beforeChange.end,
+          this.#beforeChange.direction ?? undefined,
+        );
+      }
     }
 
     updateAttributes(attrs: InputAttributes) {
