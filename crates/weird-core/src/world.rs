@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-    sync::{Arc, atomic::AtomicU64},
+    sync::{Arc, Weak, atomic::AtomicU64},
 };
 
 use tokio::sync::RwLock;
@@ -21,7 +21,12 @@ impl World {
         let mut state = self.state.write().await;
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
         let inner = ConnectionInner { event_tx };
-        let conn = Connection { id, event_rx };
+        let conn = Connection {
+            id,
+            event_rx,
+            state: Arc::downgrade(&self.state),
+            world_did_change_events: self.world_did_change_events.clone(),
+        };
         state.connections.insert(id, inner);
         conn
     }
@@ -316,6 +321,7 @@ struct WorldState {
     parents: BTreeMap<NodeId, (NodeId, usize)>,
     children: BTreeMap<NodeId, Vec<NodeId>>,
     connection_by_node: BTreeMap<NodeId, ConnectionId>,
+    nodes_by_connection: BTreeMap<ConnectionId, BTreeSet<NodeId>>,
     connections: BTreeMap<ConnectionId, ConnectionInner>,
 }
 
@@ -332,9 +338,14 @@ impl WorldState {
         while let Some(node_id) = node_queue.pop_front() {
             // Remove the node from each map
             self.nodes.remove(&node_id);
-            self.connection_by_node.remove(&node_id);
+            let conn_id = self.connection_by_node.remove(&node_id);
             let parent = self.parents.remove(&node_id);
             let children = self.children.remove(&node_id);
+            if let Some(conn_id) = conn_id
+                && let Some(conn_node_ids) = self.nodes_by_connection.get_mut(&conn_id)
+            {
+                conn_node_ids.remove(&node_id);
+            }
 
             // Track the parent node
             if let Some((parent_id, parent_index)) = parent {
@@ -396,6 +407,10 @@ impl WorldState {
             let node = Arc::new(node);
             self.nodes.insert(node_id, node.clone());
             self.connection_by_node.insert(node_id, connection_id);
+            self.nodes_by_connection
+                .entry(connection_id)
+                .or_default()
+                .insert(node_id);
 
             let parent_children = self
                 .children
@@ -423,8 +438,59 @@ impl WorldState {
         top_node_id
     }
 
+    fn connection_did_close(
+        &mut self,
+        connection_id: ConnectionId,
+        event: &mut WorldDidChangeResponse,
+    ) {
+        // Mark any window nodes owned by the connection as stale
+        let node_ids = self
+            .nodes_by_connection
+            .get(&connection_id)
+            .into_iter()
+            .flatten();
+        for node_id in node_ids {
+            let node = self.nodes.get_mut(node_id).unwrap();
+            if let FlatNode::Element(el) = &**node
+                && el.tag == "Window"
+                && el.attributes.get("stale") != Some(&serde_json::Value::Bool(true))
+            {
+                let node = Arc::make_mut(node);
+                let FlatNode::Element(el) = node else {
+                    unreachable!();
+                };
+                el.attributes
+                    .insert("stale".into(), serde_json::Value::Bool(true));
+                event.changes.push(WorldChange::Updated(UpdatedNodeChange {
+                    id: *node_id,
+                    update: NodeUpdate::Element(ElementNodeUpdate {
+                        set_attributes: HashMap::from_iter([(
+                            "stale".into(),
+                            serde_json::Value::Bool(true),
+                        )]),
+                        clear_attributes: HashSet::new(),
+                    }),
+                }));
+            }
+        }
+    }
+
     fn is_internally_consistent(&self) -> bool {
+        let mut expected_nodes_by_connection = BTreeMap::<_, BTreeSet<_>>::new();
+
         for (node_id, node) in &self.nodes {
+            if *node_id != ROOT_NODE_ID {
+                let Some(conn_id) = self.connection_by_node.get(node_id) else {
+                    tracing::warn!(?node_id, "node does not belong to a connection");
+                    return false;
+                };
+
+                expected_nodes_by_connection
+                    .entry(*conn_id)
+                    .or_default()
+                    .insert(*node_id);
+            }
+
             if !self.connection_by_node.contains_key(node_id) && *node_id != ROOT_NODE_ID {
                 tracing::warn!(?node_id, "node does not belong to a connection");
                 return false;
@@ -468,6 +534,11 @@ impl WorldState {
             return false;
         }
 
+        if self.nodes_by_connection != expected_nodes_by_connection {
+            tracing::warn!(nodes_by_connection = ?self.nodes_by_connection, connection_by_node = ?self.connection_by_node, "nodes_by_connection and connection_by_node maps don't align");
+            return false;
+        }
+
         true
     }
 }
@@ -483,6 +554,7 @@ impl Default for WorldState {
             children: BTreeMap::from_iter([(ROOT_NODE_ID, vec![])]),
             connections: BTreeMap::new(),
             connection_by_node: BTreeMap::new(),
+            nodes_by_connection: BTreeMap::new(),
         }
     }
 }
@@ -580,11 +652,32 @@ struct ConnectionInner {
 pub struct Connection {
     pub id: ConnectionId,
     event_rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
+    state: Weak<RwLock<WorldState>>,
+    world_did_change_events: tokio::sync::broadcast::Sender<WorldDidChangeResponse>,
 }
 
 impl Connection {
     pub async fn next_event(&mut self) -> Option<Event> {
         self.event_rx.recv().await
+    }
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        let Some(state) = self.state.upgrade() else {
+            return;
+        };
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let mut state = state.write().await;
+                let mut event = WorldDidChangeResponse::default();
+                state.connection_did_close(self.id, &mut event);
+                if !event.is_empty() {
+                    let _ = self.world_did_change_events.send(event);
+                }
+            })
+        })
     }
 }
 

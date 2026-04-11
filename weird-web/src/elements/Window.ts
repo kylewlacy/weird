@@ -18,6 +18,7 @@ interface WindowMoveState {
 const WindowAttributes = z.object({
   title: z.string().optional(),
   unpadded: z.boolean().optional(),
+  stale: z.boolean().optional(),
 });
 type WindowAttributes = z.output<typeof WindowAttributes>;
 
@@ -33,6 +34,7 @@ export const Window = defineElement(
     #closeButton: HTMLButtonElement;
     #isMaximized: boolean = false;
     #titleNode: Text;
+    #staleOverlay: HTMLDivElement;
     #left: number = 0;
     #top: number = 0;
 
@@ -78,7 +80,14 @@ export const Window = defineElement(
             (this.#closeButton = titlebarButtonComponent({}, "X")),
           ),
         )),
-        h("div", {}, (this.domSlot = h("div", {}))),
+        h(
+          "div",
+          { className: clsx("relative") },
+          (this.#staleOverlay = h("div", {
+            className: clsx("absolute inset-0 bg-black dark:bg-white"),
+          })),
+          (this.domSlot = h("div", {})),
+        ),
       );
 
       let pointerMoveState: WindowMoveState | undefined;
@@ -200,11 +209,15 @@ export const Window = defineElement(
 
     updateAttributes(attrs: WindowAttributes) {
       const unpadded = attrs.unpadded ?? false;
+      const stale = attrs.stale ?? false;
       this.#titleNode.textContent = attrs.title ?? DEFAULT_WINDOW_TITLE;
       this.domSlot.className = clsx(
         "flex flex-col gap-1",
         unpadded ? "p-0" : "p-1",
       );
+      this.#staleOverlay.classList.add(clsx("transition-opacity"));
+      this.#staleOverlay.style.opacity = stale ? "40%" : "0";
+      this.#staleOverlay.style.pointerEvents = stale ? "" : "none";
     }
   },
 );

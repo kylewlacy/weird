@@ -141,7 +141,7 @@ pub async fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Con
     (world, conn, window_id)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_world_did_change_nothing() {
     let (mut world, conn, window) = init_world([]).await;
 
@@ -150,7 +150,7 @@ async fn test_world_did_change_nothing() {
     assert_eq!(diff, WorldDidChangeResponse::default());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_world_did_change_add_to_empty() {
     let (mut world, conn, window) = init_world([]).await;
 
@@ -195,7 +195,7 @@ async fn test_world_did_change_add_to_empty() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_world_did_change_remove_all() {
     let (mut world, conn, window) = init_world([
         Node::element("Box")
@@ -235,7 +235,7 @@ async fn test_world_did_change_remove_all() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_world_did_change_replace_all() {
     let (mut world, conn, window) = init_world([
         Node::element("Fizz"),
@@ -277,7 +277,7 @@ async fn test_world_did_change_replace_all() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_world_did_change_reorder_nodes() {
     let (mut world, conn, window) = init_world([
         Node::element("First"),
@@ -343,7 +343,7 @@ async fn test_world_did_change_reorder_nodes() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_world_did_change_update_nodes() {
     let (mut world, conn, window) = init_world([
         Node::element("Foo").attr("value", 1),
@@ -387,7 +387,7 @@ async fn test_world_did_change_update_nodes() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_world_did_change_complex() {
     let (mut world, conn, window) = init_world([
         Node::element("Foo").attr("value", 1),
