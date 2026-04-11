@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
-    sync::Arc,
+    sync::{Arc, atomic::AtomicU64},
 };
 
 use tokio::sync::RwLock;
@@ -9,15 +9,16 @@ use tokio::sync::RwLock;
 pub struct World {
     state: Arc<RwLock<WorldState>>,
     world_did_change_events: tokio::sync::broadcast::Sender<WorldDidChangeResponse>,
+    next_connection_id: Arc<AtomicU64>,
 }
 
 impl World {
     pub async fn create_connection(&self) -> Connection {
+        let id = self
+            .next_connection_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id = ConnectionId(id);
         let mut state = self.state.write().await;
-        let id = state
-            .connections
-            .last_key_value()
-            .map_or(ConnectionId(0), |(last_id, _)| ConnectionId(last_id.0 + 1));
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
         let inner = ConnectionInner { event_tx };
         let conn = Connection { id, event_rx };
@@ -304,11 +305,13 @@ impl Default for World {
         Self {
             state: Arc::new(RwLock::new(WorldState::default())),
             world_did_change_events: tokio::sync::broadcast::Sender::new(10),
+            next_connection_id: Arc::new(AtomicU64::new(1)),
         }
     }
 }
 
 struct WorldState {
+    next_node_id: u64,
     nodes: BTreeMap<NodeId, Arc<FlatNode>>,
     parents: BTreeMap<NodeId, (NodeId, usize)>,
     children: BTreeMap<NodeId, Vec<NodeId>>,
@@ -378,18 +381,15 @@ impl WorldState {
         connection_id: ConnectionId,
         event: &mut WorldDidChangeResponse,
     ) -> NodeId {
-        let node_id = self
-            .nodes
-            .last_key_value()
-            .map(|(last_id, _)| NodeId(last_id.0 + 1))
-            .expect("world.nodes is empty");
-        let mut queue = VecDeque::from_iter([(Some(node_id), node, parent_id)]);
+        let top_node_id = NodeId(self.next_node_id);
+        self.next_node_id = self.next_node_id.checked_add(1).unwrap();
+
+        let mut queue = VecDeque::from_iter([(Some(top_node_id), node, parent_id)]);
         while let Some((node_id, node, parent_id)) = queue.pop_front() {
             let node_id = node_id.unwrap_or_else(|| {
-                self.nodes
-                    .last_key_value()
-                    .map(|(last_id, _)| NodeId(last_id.0 + 1))
-                    .expect("world.nodes is empty")
+                let node_id = NodeId(self.next_node_id);
+                self.next_node_id = self.next_node_id.checked_add(1).unwrap();
+                node_id
             });
 
             let (node, children) = node.into_flat_and_children();
@@ -420,7 +420,7 @@ impl WorldState {
             }));
         }
 
-        node_id
+        top_node_id
     }
 
     fn is_internally_consistent(&self) -> bool {
@@ -477,6 +477,7 @@ impl Default for WorldState {
         let root_node = FlatNode::Element(FlatElement::new("World"));
 
         Self {
+            next_node_id: ROOT_NODE_ID.0 + 1,
             nodes: BTreeMap::from_iter([(ROOT_NODE_ID, Arc::new(root_node))]),
             parents: BTreeMap::new(),
             children: BTreeMap::from_iter([(ROOT_NODE_ID, vec![])]),
