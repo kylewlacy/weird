@@ -16,10 +16,7 @@ pub async fn serve_unix_socket(
 }
 
 async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> anyhow::Result<()> {
-    let world_conn = {
-        let mut world = state.world.write().await;
-        world.create_connection()
-    };
+    let world_conn = state.world.create_connection().await;
     let connection_id = world_conn.id;
 
     let (stream_rx, mut stream_tx) = conn.split();

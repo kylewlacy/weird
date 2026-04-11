@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use tokio::sync::RwLock;
 use tracing::Instrument;
 use weird_core::{
     proto::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, Request, Response},
@@ -9,7 +6,7 @@ use weird_core::{
 
 #[derive(Clone)]
 pub struct AppState {
-    pub world: Arc<RwLock<World>>,
+    pub world: World,
 }
 
 pub async fn handle_conn(
@@ -25,14 +22,12 @@ pub async fn handle_conn(
 
         match request.body {
             Request::SyncWorld {} => {
-                let world = state.world.read().await;
-
-                let event = world.initial_client_world_did_change_event();
-                let mut events_rx = world.subscribe_to_world_did_change_events();
-                let response =
-                    JsonRpcResponse::result(request.id.clone(), Response::WorldDidChange(event));
-
-                drop(world);
+                let (initial_event, mut events_rx) =
+                    state.world.subscribe_to_world_did_change_events().await;
+                let response = JsonRpcResponse::result(
+                    request.id.clone(),
+                    Response::WorldDidChange(initial_event),
+                );
 
                 let out_result = client_out.send(response).await;
                 match out_result {
@@ -75,9 +70,7 @@ pub async fn handle_conn(
                 );
             }
             Request::TriggerEvent(trigger_event) => {
-                let mut world = state.world.write().await;
-
-                let result = world.trigger_event(trigger_event).await.map_or_else(
+                let result = state.world.trigger_event(trigger_event).await.map_or_else(
                     |error| {
                         Err(JsonRpcError {
                             code: 2,
@@ -98,10 +91,11 @@ pub async fn handle_conn(
                 }
             }
             Request::Render(render) => {
-                let mut world = state.world.write().await;
-
                 let response = if let Some(window_node) = window_node {
-                    let result = world.set_node_children(window_node, render, conn.id);
+                    let result = state
+                        .world
+                        .set_node_children(window_node, render, conn.id)
+                        .await;
                     result.map_or_else(
                         |error| {
                             Err(JsonRpcError {
@@ -116,13 +110,16 @@ pub async fn handle_conn(
                     )
                 } else {
                     window_node = Some(
-                        world.append_node(
-                            weird_core::world::Element::new("Window")
-                                .children(render)
-                                .into(),
-                            ROOT_NODE_ID,
-                            conn.id,
-                        ),
+                        state
+                            .world
+                            .append_node(
+                                weird_core::world::Element::new("Window")
+                                    .children(render)
+                                    .into(),
+                                ROOT_NODE_ID,
+                                conn.id,
+                            )
+                            .await,
                     );
                     Ok(Response::Empty)
                 };

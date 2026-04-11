@@ -1,7 +1,7 @@
-use std::{path::Path, sync::Arc};
+use std::path::Path;
 
 use anyhow::Context as _;
-use tokio::{io::AsyncWriteExt as _, sync::RwLock};
+use tokio::io::AsyncWriteExt as _;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 use crate::conn::AppState;
@@ -22,10 +22,9 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let world = weird_core::world::World::default();
-    let world = Arc::new(RwLock::new(world));
-
-    let state = AppState { world };
+    let state = AppState {
+        world: weird_core::world::World::default(),
+    };
 
     let http_app = http_listener::router(state.clone());
 

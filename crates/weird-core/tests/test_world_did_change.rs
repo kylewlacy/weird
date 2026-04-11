@@ -13,24 +13,29 @@ pub async fn render(
     node_id: NodeId,
     children: Vec<Node>,
 ) -> WorldDidChangeResponse {
-    world.assert_internally_consistent();
+    world.assert_internally_consistent().await;
 
-    let mut rx = world.subscribe_to_world_did_change_events();
-    let did_change = world.set_node_children(node_id, children, conn_id).unwrap();
+    let (_, mut rx) = world.subscribe_to_world_did_change_events().await;
+    let did_change = world
+        .set_node_children(node_id, children, conn_id)
+        .await
+        .unwrap();
     let result = if did_change {
         rx.recv().await.unwrap()
     } else {
         WorldDidChangeResponse::default()
     };
 
-    world.assert_internally_consistent();
+    world.assert_internally_consistent().await;
 
     result
 }
 
-pub fn node_id(world: &mut World, id: &str) -> NodeId {
+pub async fn node_id(world: &mut World, id: &str) -> NodeId {
     let node_id = world
-        .nodes()
+        .get_nodes()
+        .await
+        .into_iter()
         .find_map(|(node_id, node)| {
             if node.get_id() == Some(id) {
                 Some(node_id)
@@ -43,11 +48,13 @@ pub fn node_id(world: &mut World, id: &str) -> NodeId {
     node_id
 }
 
-pub fn node_text(world: &mut World, text: &str) -> NodeId {
+pub async fn node_text(world: &mut World, text: &str) -> NodeId {
     let node_id = world
-        .nodes()
+        .get_nodes()
+        .await
+        .into_iter()
         .find_map(|(node_id, node)| {
-            if let FlatNode::Text(node_text) = node
+            if let FlatNode::Text(node_text) = &*node
                 && node_text == text
             {
                 Some(node_id)
@@ -60,11 +67,13 @@ pub fn node_text(world: &mut World, text: &str) -> NodeId {
     node_id
 }
 
-pub fn node_tag(world: &mut World, tag: &str) -> NodeId {
+pub async fn node_tag(world: &mut World, tag: &str) -> NodeId {
     let node_id = world
-        .nodes()
+        .get_nodes()
+        .await
+        .into_iter()
         .find_map(|(node_id, node)| {
-            if let FlatNode::Element(element) = node
+            if let FlatNode::Element(element) = &*node
                 && element.tag == tag
             {
                 Some(node_id)
@@ -102,7 +111,7 @@ pub fn deleted(id: NodeId) -> WorldChange {
     WorldChange::Deleted(DeletedNodeChange { id })
 }
 
-pub fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Connection, NodeId) {
+pub async fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Connection, NodeId) {
     use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
     tracing_subscriber::registry()
@@ -118,21 +127,23 @@ pub fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Connectio
         )
         .init();
 
-    let mut world = World::default();
-    let conn = world.create_connection();
+    let world = World::default();
+    let conn = world.create_connection().await;
 
-    let window_id = world.append_node(
-        Node::element("Window").children(children),
-        ROOT_NODE_ID,
-        conn.id,
-    );
+    let window_id = world
+        .append_node(
+            Node::element("Window").children(children),
+            ROOT_NODE_ID,
+            conn.id,
+        )
+        .await;
 
     (world, conn, window_id)
 }
 
 #[tokio::test]
 async fn test_world_did_change_nothing() {
-    let (mut world, conn, window) = init_world([]);
+    let (mut world, conn, window) = init_world([]).await;
 
     let diff = render(&mut world, conn.id, window, vec![]).await;
 
@@ -141,7 +152,7 @@ async fn test_world_did_change_nothing() {
 
 #[tokio::test]
 async fn test_world_did_change_add_to_empty() {
-    let (mut world, conn, window) = init_world([]);
+    let (mut world, conn, window) = init_world([]).await;
 
     let diff = render(
         &mut world,
@@ -162,13 +173,13 @@ async fn test_world_did_change_add_to_empty() {
     )
     .await;
 
-    let node_1 = node_id(&mut world, "node1");
-    let node_2 = node_id(&mut world, "node2");
-    let foo = node_text(&mut world, "Foo");
-    let bar = node_text(&mut world, "Bar");
-    let button = node_tag(&mut world, "Button");
-    let click_me = node_text(&mut world, "Click me");
-    let hello_world = node_text(&mut world, "hello world");
+    let node_1 = node_id(&mut world, "node1").await;
+    let node_2 = node_id(&mut world, "node2").await;
+    let foo = node_text(&mut world, "Foo").await;
+    let bar = node_text(&mut world, "Bar").await;
+    let button = node_tag(&mut world, "Button").await;
+    let click_me = node_text(&mut world, "Click me").await;
+    let hello_world = node_text(&mut world, "hello world").await;
 
     assert_eq!(
         diff.changes,
@@ -197,15 +208,16 @@ async fn test_world_did_change_remove_all() {
             .child(Node::text("Bar")),
         Node::element("Button").child(Node::text("Click me")),
         Node::text("hello world"),
-    ]);
+    ])
+    .await;
 
-    let node_1 = dbg!(node_id(&mut world, "node1"));
-    let node_2 = dbg!(node_id(&mut world, "node2"));
-    let foo = dbg!(node_text(&mut world, "Foo"));
-    let bar = dbg!(node_text(&mut world, "Bar"));
-    let button = dbg!(node_tag(&mut world, "Button"));
-    let click_me = dbg!(node_text(&mut world, "Click me"));
-    let hello_world = dbg!(node_text(&mut world, "hello world"));
+    let node_1 = node_id(&mut world, "node1").await;
+    let node_2 = node_id(&mut world, "node2").await;
+    let foo = node_text(&mut world, "Foo").await;
+    let bar = node_text(&mut world, "Bar").await;
+    let button = node_tag(&mut world, "Button").await;
+    let click_me = node_text(&mut world, "Click me").await;
+    let hello_world = node_text(&mut world, "hello world").await;
 
     let diff = render(&mut world, conn.id, window, vec![]).await;
 
@@ -229,11 +241,12 @@ async fn test_world_did_change_replace_all() {
         Node::element("Fizz"),
         Node::element("Buzz"),
         Node::text("foobar"),
-    ]);
+    ])
+    .await;
 
-    let fizz = node_tag(&mut world, "Fizz");
-    let buzz = node_tag(&mut world, "Buzz");
-    let foobar = node_text(&mut world, "foobar");
+    let fizz = node_tag(&mut world, "Fizz").await;
+    let buzz = node_tag(&mut world, "Buzz").await;
+    let foobar = node_text(&mut world, "foobar").await;
 
     let diff = render(
         &mut world,
@@ -247,9 +260,9 @@ async fn test_world_did_change_replace_all() {
     )
     .await;
 
-    let foo = node_tag(&mut world, "Foo");
-    let bar = node_tag(&mut world, "Bar");
-    let other = node_tag(&mut world, "Other");
+    let foo = node_tag(&mut world, "Foo").await;
+    let bar = node_tag(&mut world, "Bar").await;
+    let other = node_tag(&mut world, "Other").await;
 
     assert_eq!(
         diff.changes,
@@ -273,13 +286,14 @@ async fn test_world_did_change_reorder_nodes() {
         Node::element("Other"),
         Node::text("text"),
         Node::element("Last"),
-    ]);
+    ])
+    .await;
 
-    let foo = node_tag(&mut world, "Foo");
-    let bar = node_id(&mut world, "node-bar");
-    let other = node_tag(&mut world, "Other");
-    let text = node_text(&mut world, "text");
-    let last = node_tag(&mut world, "Last");
+    let foo = node_tag(&mut world, "Foo").await;
+    let bar = node_id(&mut world, "node-bar").await;
+    let other = node_tag(&mut world, "Other").await;
+    let text = node_text(&mut world, "text").await;
+    let last = node_tag(&mut world, "Last").await;
 
     let diff = render(
         &mut world,
@@ -336,12 +350,13 @@ async fn test_world_did_change_update_nodes() {
         Node::element("Bar").attr("value", "A"),
         Node::text("text 1"),
         Node::text("text 2"),
-    ]);
+    ])
+    .await;
 
-    let foo = node_tag(&mut world, "Foo");
-    let bar = node_tag(&mut world, "Bar");
-    let text_1 = node_text(&mut world, "text 1");
-    let text_2 = node_text(&mut world, "text 2");
+    let foo = node_tag(&mut world, "Foo").await;
+    let bar = node_tag(&mut world, "Bar").await;
+    let text_1 = node_text(&mut world, "text 1").await;
+    let text_2 = node_text(&mut world, "text 2").await;
 
     let diff = render(
         &mut world,
@@ -379,7 +394,8 @@ async fn test_world_did_change_complex() {
         Node::element("Bar").attr("value", "A"),
         Node::text("text 1"),
         Node::text("text 2"),
-    ]);
+    ])
+    .await;
 
     render(
         &mut world,

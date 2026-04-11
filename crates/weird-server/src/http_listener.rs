@@ -23,10 +23,7 @@ async fn ws_endpoint_handler(
 }
 
 async fn ws_handler(state: AppState, socket: ws::WebSocket) {
-    let world_conn = {
-        let mut world = state.world.write().await;
-        world.create_connection()
-    };
+    let world_conn = state.world.create_connection().await;
     let connection_id = world_conn.id;
 
     let (mut socket_tx, mut socket_rx) = socket.split();

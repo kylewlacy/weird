@@ -3,101 +3,57 @@ use std::{
     sync::Arc,
 };
 
+use tokio::sync::RwLock;
+
+#[derive(Clone)]
 pub struct World {
-    nodes: BTreeMap<NodeId, Arc<FlatNode>>,
-    parents: BTreeMap<NodeId, (NodeId, usize)>,
-    children: BTreeMap<NodeId, Vec<NodeId>>,
-    connection_by_node: BTreeMap<NodeId, ConnectionId>,
-    connections: BTreeMap<ConnectionId, ConnectionInner>,
+    state: Arc<RwLock<WorldState>>,
     world_did_change_events: tokio::sync::broadcast::Sender<WorldDidChangeResponse>,
 }
 
 impl World {
-    pub fn create_connection(&mut self) -> Connection {
-        let id = self
+    pub async fn create_connection(&self) -> Connection {
+        let mut state = self.state.write().await;
+        let id = state
             .connections
             .last_key_value()
             .map_or(ConnectionId(0), |(last_id, _)| ConnectionId(last_id.0 + 1));
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
         let inner = ConnectionInner { event_tx };
         let conn = Connection { id, event_rx };
-        self.connections.insert(id, inner);
+        state.connections.insert(id, inner);
         conn
     }
 
-    pub fn nodes(&self) -> impl Iterator<Item = (NodeId, &FlatNode)> {
-        self.nodes.iter().map(|(key, value)| (*key, &**value))
+    pub async fn get_nodes(&self) -> BTreeMap<NodeId, Arc<FlatNode>> {
+        let state = self.state.read().await;
+        state.nodes.clone()
     }
 
-    pub fn append_node(
-        &mut self,
+    pub async fn append_node(
+        &self,
         node: Node,
         parent_id: NodeId,
         connection_id: ConnectionId,
     ) -> NodeId {
+        let mut state = self.state.write().await;
         let mut event = WorldDidChangeResponse::default();
-        let node_id = self.append_node_inner(node, parent_id, connection_id, &mut event);
 
-        let _ = self.world_did_change_events.send(event);
+        let node_id = state.append_node_inner(node, parent_id, connection_id, &mut event);
 
-        node_id
-    }
-
-    fn append_node_inner(
-        &mut self,
-        node: Node,
-        parent_id: NodeId,
-        connection_id: ConnectionId,
-        event: &mut WorldDidChangeResponse,
-    ) -> NodeId {
-        let node_id = self
-            .nodes
-            .last_key_value()
-            .map(|(last_id, _)| NodeId(last_id.0 + 1))
-            .expect("world.nodes is empty");
-        let mut queue = VecDeque::from_iter([(Some(node_id), node, parent_id)]);
-        while let Some((node_id, node, parent_id)) = queue.pop_front() {
-            let node_id = node_id.unwrap_or_else(|| {
-                self.nodes
-                    .last_key_value()
-                    .map(|(last_id, _)| NodeId(last_id.0 + 1))
-                    .expect("world.nodes is empty")
-            });
-
-            let (node, children) = node.into_flat_and_children();
-            let node = Arc::new(node);
-            self.nodes.insert(node_id, node.clone());
-            self.connection_by_node.insert(node_id, connection_id);
-
-            let parent_children = self
-                .children
-                .get_mut(&parent_id)
-                .unwrap_or_else(|| panic!("node {parent_id:?} cannot have children"));
-            let parent_index = parent_children.len();
-
-            parent_children.push(node_id);
-            self.parents.insert(node_id, (parent_id, parent_index));
-
-            if let Some(children) = children {
-                self.children.insert(node_id, vec![]);
-
-                queue.extend(children.into_iter().map(|child| (None, child, node_id)));
-            }
-
-            event.changes.push(WorldChange::Created(CreatedNodeChange {
-                id: node_id,
-                parent_id,
-                before_sibling_id: None,
-                node,
-            }));
+        drop(state);
+        if !event.is_empty() {
+            let _ = self.world_did_change_events.send(event);
         }
 
         node_id
     }
 
-    pub fn remove_node(&mut self, node_id: NodeId) {
+    pub async fn remove_node(&self, node_id: NodeId) {
+        let mut state = self.state.write().await;
+
         let mut event = WorldDidChangeResponse::default();
-        self.remove_nodes_inner(VecDeque::from_iter([node_id]), &mut event);
+        state.remove_nodes_inner(VecDeque::from_iter([node_id]), &mut event);
 
         let num_receivers = self.world_did_change_events.receiver_count();
         if num_receivers != 0 {
@@ -108,6 +64,259 @@ impl World {
         }
     }
 
+    pub async fn set_node_children(
+        &self,
+        node_id: NodeId,
+        children: Vec<Node>,
+        connection: ConnectionId,
+    ) -> Result<bool, SetNodeChildrenFailed> {
+        let mut state = self.state.write().await;
+        let mut event = WorldDidChangeResponse::default();
+
+        if !state.nodes.contains_key(&node_id) {
+            return Err(SetNodeChildrenFailed::NodeNotFound);
+        }
+
+        let mut update_queue = VecDeque::from_iter([(node_id, children)]);
+
+        while let Some((node_id, new_children)) = update_queue.pop_front() {
+            let Some(current_child_ids) = state.children.get(&node_id) else {
+                return Err(SetNodeChildrenFailed::InvalidNodeType);
+            };
+
+            let mut unmatched_children = HashMap::<NodeMatchKey, VecDeque<_>>::new();
+            for current_child_id in current_child_ids {
+                let current_child = state
+                    .nodes
+                    .get(current_child_id)
+                    .unwrap_or_else(|| panic!("node not found: {current_child_id:?}"));
+                let key = NodeMatchKey::from(&**current_child);
+                unmatched_children
+                    .entry(key)
+                    .or_default()
+                    .push_back(*current_child_id);
+            }
+
+            let mut new_ordered_child_ids = vec![];
+
+            for child in new_children {
+                let key = NodeMatchKey::from(&child);
+                let matched_child_id = unmatched_children
+                    .get_mut(&key)
+                    .and_then(VecDeque::pop_front);
+
+                let child_id = if let Some(matched_child_id) = matched_child_id {
+                    let matched_child = state.nodes.get_mut(&matched_child_id).unwrap();
+
+                    let (child, child_children) = child.into_flat_and_children();
+
+                    if let Some(update) = node_update(matched_child, &child) {
+                        event.changes.push(WorldChange::Updated(UpdatedNodeChange {
+                            id: matched_child_id,
+                            update,
+                        }));
+                        *matched_child = Arc::new(child);
+                    }
+
+                    if let Some(child_children) = child_children {
+                        update_queue.push_back((matched_child_id, child_children));
+                    }
+
+                    matched_child_id
+                } else {
+                    state.append_node_inner(child, node_id, connection, &mut event)
+                };
+
+                new_ordered_child_ids.push(child_id);
+            }
+
+            // Remove all the child nodes we couldn't match
+            // (Note: we sort through a `BTreeSet` just so the order is
+            // consistent, which is handy for testing)
+            let unmatched_children = unmatched_children
+                .into_values()
+                .flatten()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            state.remove_nodes_inner(unmatched_children, &mut event);
+
+            // Reorder the child nodes. We do this in reverse order because
+            // moves events have a `before_sibling_id`, so moving the
+            // end nodes first simplifies things.
+            for (index, child_id) in new_ordered_child_ids.iter().enumerate().rev() {
+                let (parent_id, current_index) = state.parents.get_mut(child_id).unwrap();
+
+                // Ensure the node isn't being re-parented! This logic
+                // assumes that we're visiting every child
+                assert_eq!(*parent_id, node_id);
+
+                // Skip the node if it's already at the right index
+                if *current_index == index {
+                    continue;
+                }
+
+                // Add the event
+                let before_sibling_id = new_ordered_child_ids.get(index + 1).copied();
+                event.changes.push(WorldChange::Moved(MovedNodeChange {
+                    id: *child_id,
+                    parent_id: node_id,
+                    before_sibling_id,
+                }));
+
+                // Update the node's parent index
+                *current_index = index;
+            }
+
+            // Update the child node list
+            state.children.insert(node_id, new_ordered_child_ids);
+        }
+
+        drop(state);
+        if event.is_empty() {
+            Ok(false)
+        } else {
+            let _ = self.world_did_change_events.send(event);
+            Ok(true)
+        }
+    }
+
+    /// Subscribe to future `WorldDidChangeResponse` events, and additionally
+    /// get an initial event, which describes changes to get to the
+    /// current world state.
+    pub async fn subscribe_to_world_did_change_events(
+        &self,
+    ) -> (
+        WorldDidChangeResponse,
+        tokio::sync::broadcast::Receiver<WorldDidChangeResponse>,
+    ) {
+        let state = self.state.read().await;
+
+        let mut initial_event = WorldDidChangeResponse::default();
+
+        let root_children = state
+            .children
+            .get(&ROOT_NODE_ID)
+            .expect("root node does not have child list");
+        let mut queue: VecDeque<_> = root_children.iter().copied().collect();
+
+        while let Some(id) = queue.pop_front() {
+            if let Some(children) = state.children.get(&id) {
+                queue.extend(children.iter().copied());
+            }
+
+            let node = &state.nodes[&id];
+
+            // Every node has a parent except for the root node, which
+            // is excluded from the `DidInsert` event
+            let (parent_id, parent_index) = state
+                .parents
+                .get(&id)
+                .unwrap_or_else(|| panic!("node {id:?} does not have a parent"));
+
+            let before_sibling_id = state.children[parent_id].get(parent_index + 1).copied();
+            initial_event
+                .changes
+                .push(WorldChange::Created(CreatedNodeChange {
+                    id,
+                    parent_id: *parent_id,
+                    before_sibling_id,
+                    node: node.clone(),
+                }));
+        }
+
+        let events_rx = self.world_did_change_events.subscribe();
+
+        (initial_event, events_rx)
+    }
+
+    pub async fn trigger_event(&self, event: TriggerEvent) -> Result<(), TriggerEventFailed> {
+        let mut state = self.state.write().await;
+        let mut change_event = WorldDidChangeResponse::default();
+
+        let connection = state
+            .connection_by_node
+            .get(&event.target_node_id)
+            .and_then(|connection_id| {
+                Some((state.connections.get(connection_id)?, *connection_id))
+            });
+        let Some((connection, connection_id)) = connection else {
+            return Err(TriggerEventFailed::NoConnectionForNode);
+        };
+
+        let target_node = state.nodes.get(&event.target_node_id);
+        if event.event == "close"
+            && let Some(target_node) = target_node
+            && let FlatNode::Element(el) = &**target_node
+            && el.tag == "Window"
+            && state
+                .parents
+                .get(&event.target_node_id)
+                .is_some_and(|(parent_id, _)| *parent_id == ROOT_NODE_ID)
+        {
+            // Window.close event
+
+            // Close the connection by removing it
+            state.connections.remove(&connection_id);
+
+            // Remove the window node
+            state.remove_nodes_inner(
+                VecDeque::from_iter([event.target_node_id]),
+                &mut change_event,
+            );
+        } else {
+            let target_id = target_node
+                .and_then(|node| node.get_id())
+                .map(ToString::to_string);
+            let event = Event {
+                event: event.event,
+                params: event.params,
+                target_node_id: event.target_node_id,
+                target_id,
+            };
+
+            connection
+                .event_tx
+                .send(event)
+                .map_err(|_| TriggerEventFailed::NoConnectionForNode)?;
+        }
+
+        drop(state);
+        if !change_event.is_empty() {
+            let _ = self.world_did_change_events.send(change_event);
+        }
+
+        Ok(())
+    }
+
+    pub async fn assert_internally_consistent(&self) {
+        assert!(self.is_internally_consistent().await);
+    }
+
+    async fn is_internally_consistent(&self) -> bool {
+        let state = self.state.read().await;
+        state.is_internally_consistent()
+    }
+}
+
+impl Default for World {
+    fn default() -> Self {
+        Self {
+            state: Arc::new(RwLock::new(WorldState::default())),
+            world_did_change_events: tokio::sync::broadcast::Sender::new(10),
+        }
+    }
+}
+
+struct WorldState {
+    nodes: BTreeMap<NodeId, Arc<FlatNode>>,
+    parents: BTreeMap<NodeId, (NodeId, usize)>,
+    children: BTreeMap<NodeId, Vec<NodeId>>,
+    connection_by_node: BTreeMap<NodeId, ConnectionId>,
+    connections: BTreeMap<ConnectionId, ConnectionInner>,
+}
+
+impl WorldState {
     fn remove_nodes_inner(
         &mut self,
         mut node_queue: VecDeque<NodeId>,
@@ -162,210 +371,56 @@ impl World {
         }
     }
 
-    pub fn set_node_children(
+    fn append_node_inner(
         &mut self,
-        node_id: NodeId,
-        children: Vec<Node>,
-        connection: ConnectionId,
-    ) -> Result<bool, SetNodeChildrenFailed> {
-        let mut event = WorldDidChangeResponse::default();
+        node: Node,
+        parent_id: NodeId,
+        connection_id: ConnectionId,
+        event: &mut WorldDidChangeResponse,
+    ) -> NodeId {
+        let node_id = self
+            .nodes
+            .last_key_value()
+            .map(|(last_id, _)| NodeId(last_id.0 + 1))
+            .expect("world.nodes is empty");
+        let mut queue = VecDeque::from_iter([(Some(node_id), node, parent_id)]);
+        while let Some((node_id, node, parent_id)) = queue.pop_front() {
+            let node_id = node_id.unwrap_or_else(|| {
+                self.nodes
+                    .last_key_value()
+                    .map(|(last_id, _)| NodeId(last_id.0 + 1))
+                    .expect("world.nodes is empty")
+            });
 
-        if !self.nodes.contains_key(&node_id) {
-            return Err(SetNodeChildrenFailed::NodeNotFound);
-        }
+            let (node, children) = node.into_flat_and_children();
+            let node = Arc::new(node);
+            self.nodes.insert(node_id, node.clone());
+            self.connection_by_node.insert(node_id, connection_id);
 
-        let mut update_queue = VecDeque::from_iter([(node_id, children)]);
+            let parent_children = self
+                .children
+                .get_mut(&parent_id)
+                .unwrap_or_else(|| panic!("node {parent_id:?} cannot have children"));
+            let parent_index = parent_children.len();
 
-        while let Some((node_id, new_children)) = update_queue.pop_front() {
-            let Some(current_child_ids) = self.children.get(&node_id) else {
-                return Err(SetNodeChildrenFailed::InvalidNodeType);
-            };
+            parent_children.push(node_id);
+            self.parents.insert(node_id, (parent_id, parent_index));
 
-            let mut unmatched_children = HashMap::<NodeMatchKey, VecDeque<_>>::new();
-            for current_child_id in current_child_ids {
-                let current_child = self
-                    .nodes
-                    .get(current_child_id)
-                    .unwrap_or_else(|| panic!("node not found: {current_child_id:?}"));
-                let key = NodeMatchKey::from(&**current_child);
-                unmatched_children
-                    .entry(key)
-                    .or_default()
-                    .push_back(*current_child_id);
+            if let Some(children) = children {
+                self.children.insert(node_id, vec![]);
+
+                queue.extend(children.into_iter().map(|child| (None, child, node_id)));
             }
 
-            let mut new_ordered_child_ids = vec![];
-
-            for child in new_children {
-                let key = NodeMatchKey::from(&child);
-                let matched_child_id = unmatched_children
-                    .get_mut(&key)
-                    .and_then(VecDeque::pop_front);
-
-                let child_id = if let Some(matched_child_id) = matched_child_id {
-                    let matched_child = self.nodes.get_mut(&matched_child_id).unwrap();
-
-                    let (child, child_children) = child.into_flat_and_children();
-
-                    if let Some(update) = node_update(matched_child, &child) {
-                        event.changes.push(WorldChange::Updated(UpdatedNodeChange {
-                            id: matched_child_id,
-                            update,
-                        }));
-                        *matched_child = Arc::new(child);
-                    }
-
-                    if let Some(child_children) = child_children {
-                        update_queue.push_back((matched_child_id, child_children));
-                    }
-
-                    matched_child_id
-                } else {
-                    self.append_node_inner(child, node_id, connection, &mut event)
-                };
-
-                new_ordered_child_ids.push(child_id);
-            }
-
-            // Remove all the child nodes we couldn't match
-            // (Note: we sort through a `BTreeSet` just so the order is
-            // consistent, which is handy for testing)
-            let unmatched_children = unmatched_children
-                .into_values()
-                .flatten()
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .collect();
-            self.remove_nodes_inner(unmatched_children, &mut event);
-
-            // Reorder the child nodes. We do this in reverse order because
-            // moves events have a `before_sibling_id`, so moving the
-            // end nodes first simplifies things.
-            for (index, child_id) in new_ordered_child_ids.iter().enumerate().rev() {
-                let (parent_id, current_index) = self.parents.get_mut(child_id).unwrap();
-
-                // Ensure the node isn't being re-parented! This logic
-                // assumes that we're visiting every child
-                assert_eq!(*parent_id, node_id);
-
-                // Skip the node if it's already at the right index
-                if *current_index == index {
-                    continue;
-                }
-
-                // Add the event
-                let before_sibling_id = new_ordered_child_ids.get(index + 1).copied();
-                event.changes.push(WorldChange::Moved(MovedNodeChange {
-                    id: *child_id,
-                    parent_id: node_id,
-                    before_sibling_id,
-                }));
-
-                // Update the node's parent index
-                *current_index = index;
-            }
-
-            // Update the child node list
-            self.children.insert(node_id, new_ordered_child_ids);
-        }
-
-        if event.is_empty() {
-            Ok(false)
-        } else {
-            let _ = self.world_did_change_events.send(event);
-            Ok(true)
-        }
-    }
-
-    pub fn initial_client_world_did_change_event(&self) -> WorldDidChangeResponse {
-        let mut event = WorldDidChangeResponse::default();
-
-        let root_children = self
-            .children
-            .get(&ROOT_NODE_ID)
-            .expect("root node does not have child list");
-        let mut queue: VecDeque<_> = root_children.iter().copied().collect();
-
-        while let Some(id) = queue.pop_front() {
-            if let Some(children) = self.children.get(&id) {
-                queue.extend(children.iter().copied());
-            }
-
-            let node = &self.nodes[&id];
-
-            // Every node has a parent except for the root node, which
-            // is excluded from the `DidInsert` event
-            let (parent_id, parent_index) = self
-                .parents
-                .get(&id)
-                .unwrap_or_else(|| panic!("node {id:?} does not have a parent"));
-
-            let before_sibling_id = self.children[parent_id].get(parent_index + 1).copied();
             event.changes.push(WorldChange::Created(CreatedNodeChange {
-                id,
-                parent_id: *parent_id,
-                before_sibling_id,
-                node: node.clone(),
+                id: node_id,
+                parent_id,
+                before_sibling_id: None,
+                node,
             }));
         }
 
-        event
-    }
-
-    pub fn subscribe_to_world_did_change_events(
-        &self,
-    ) -> tokio::sync::broadcast::Receiver<WorldDidChangeResponse> {
-        self.world_did_change_events.subscribe()
-    }
-
-    pub async fn trigger_event(&mut self, event: TriggerEvent) -> Result<(), TriggerEventFailed> {
-        let connection = self
-            .connection_by_node
-            .get(&event.target_node_id)
-            .and_then(|connection_id| Some((self.connections.get(connection_id)?, *connection_id)));
-        let Some((connection, connection_id)) = connection else {
-            return Err(TriggerEventFailed::NoConnectionForNode);
-        };
-
-        let target_node = self.nodes.get(&event.target_node_id);
-        if event.event == "close"
-            && let Some(target_node) = target_node
-            && let FlatNode::Element(el) = &**target_node
-            && el.tag == "Window"
-            && self
-                .parents
-                .get(&event.target_node_id)
-                .is_some_and(|(parent_id, _)| *parent_id == ROOT_NODE_ID)
-        {
-            // Window.close event
-
-            // Close the connection by removing it
-            self.connections.remove(&connection_id);
-
-            // Remove the window node
-            self.remove_node(event.target_node_id);
-        } else {
-            let target_id = target_node
-                .and_then(|node| node.get_id())
-                .map(ToString::to_string);
-            let event = Event {
-                event: event.event,
-                params: event.params,
-                target_node_id: event.target_node_id,
-                target_id,
-            };
-
-            connection
-                .event_tx
-                .send(event)
-                .map_err(|_| TriggerEventFailed::NoConnectionForNode)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn assert_internally_consistent(&self) {
-        assert!(self.is_internally_consistent());
+        node_id
     }
 
     fn is_internally_consistent(&self) -> bool {
@@ -417,7 +472,7 @@ impl World {
     }
 }
 
-impl Default for World {
+impl Default for WorldState {
     fn default() -> Self {
         let root_node = FlatNode::Element(FlatElement::new("World"));
 
@@ -427,7 +482,6 @@ impl Default for World {
             children: BTreeMap::from_iter([(ROOT_NODE_ID, vec![])]),
             connections: BTreeMap::new(),
             connection_by_node: BTreeMap::new(),
-            world_did_change_events: tokio::sync::broadcast::Sender::new(10),
         }
     }
 }
