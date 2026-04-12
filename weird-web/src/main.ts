@@ -6,6 +6,7 @@ import { World } from "./world.ts";
 import { h } from "./elements/utils.ts";
 import clsx from "clsx";
 import { buttonComponent } from "./elements/Button.ts";
+import { selectComponent } from "./elements/Select.ts";
 
 const Theme = z.enum(["system", "light", "dark"]);
 
@@ -46,12 +47,8 @@ const app = h(
       ),
     },
     h("label", { htmlFor: "weird-theme", className: clsx("sr-only") }, "Theme"),
-    (themeChooserEl = h(
-      "select",
+    (themeChooserEl = selectComponent(
       {
-        className: clsx(
-          "px-2 bg-white border-2 border-black shadow-sm hover:shadow-sm/50 hover:bg-zinc-200 focus-visible:shadow-sm/50 focus-visible:bg-zinc-200 active:bg-zinc-300 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:hover:bg-zinc-700 dark:focus-visible:bg-zinc-700 dark:active:bg-zinc-600 dark:shadow-md",
-        ),
         value: savedTheme.data ?? "system",
       },
       h("option", { value: "system" }, "System"),
