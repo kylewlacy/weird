@@ -915,7 +915,7 @@ impl FlatElement {
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Event {
     pub target_id: Option<String>,
     pub target_node_id: NodeId,
@@ -948,9 +948,9 @@ impl Event {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TriggerEvent {
-    target_node_id: NodeId,
-    event: String,
-    params: serde_json::Value,
+    pub target_node_id: NodeId,
+    pub event: String,
+    pub params: serde_json::Value,
 }
 
 #[derive(Debug)]
