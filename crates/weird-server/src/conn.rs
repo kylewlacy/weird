@@ -13,10 +13,42 @@ pub struct AppState {
 
 pub async fn handle_conn(
     state: AppState,
-    mut conn: weird_core::world::Connection,
     mut client_in: tokio::sync::mpsc::Receiver<JsonRpcRequest<Request>>,
     client_out: tokio::sync::mpsc::Sender<JsonRpcResponse<Response>>,
 ) {
+    let Some(init_request) = client_in.recv().await else {
+        return;
+    };
+
+    let Request::Init(init_request_body) = init_request.body else {
+        let response = JsonRpcResponse::error(
+            init_request.id,
+            JsonRpcError {
+                code: 4,
+                message: "expected 'init' message".to_string(),
+                data: serde_json::Value::Null,
+            },
+        );
+        let out_result = client_out.send(response).await;
+        match out_result {
+            Ok(()) => {}
+            Err(error) => {
+                tracing::warn!("failed to send response: {error}");
+            }
+        }
+        return;
+    };
+
+    let (mut conn, init_response) = state.world.create_connection(init_request_body).await;
+    let init_response = JsonRpcResponse::result(init_request.id, Response::Init(init_response));
+    let out_result = client_out.send(init_response).await;
+    match out_result {
+        Ok(()) => {}
+        Err(error) => {
+            tracing::warn!("failed to send response: {error}");
+        }
+    }
+
     let mut window_node = None;
     let mut next_event_request_ids = VecDeque::<Option<JsonRpcRequestId>>::new();
 
@@ -29,6 +61,24 @@ pub async fn handle_conn(
                 tracing::info!("got JSON RPC request: {request:?}");
 
                 match request.body {
+                    Request::Init(_) => {
+                        let response = JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: 5,
+                                message: "received unexpected 'init' message".to_string(),
+                                data: serde_json::Value::Null,
+                            },
+                        );
+
+                        let out_result = client_out.send(response).await;
+                        match out_result {
+                            Ok(()) => {}
+                            Err(error) => {
+                                tracing::warn!("failed to send response: {error}");
+                            }
+                        }
+                    }
                     Request::SyncWorld {} => {
                         let (initial_event, mut events_rx) =
                             state.world.subscribe_to_world_did_change_events().await;

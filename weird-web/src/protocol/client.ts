@@ -7,6 +7,8 @@ import {
   JsonRpcRequest,
   Events,
   NodeId,
+  InitRequest,
+  InitResponse,
 } from "./types";
 
 export class WeirdClient {
@@ -108,7 +110,29 @@ export class WeirdClient {
     };
   }
 
-  triggerEvent(id: NodeId, event: string, params: unknown) {
+  init(request: InitRequest): Promise<InitResponse> {
+    return new Promise((resolve, reject) => {
+      this.#sendRequest("init", request, {
+        once: true,
+        on(response) {
+          const parsedResponse = InitResponse.safeParse(response);
+          if (parsedResponse.success) {
+            resolve(parsedResponse.data);
+          } else {
+            reject(parsedResponse.error);
+          }
+        },
+        onClose(cause) {
+          reject(new Error("Socket closed", { cause }));
+        },
+        onError(error) {
+          reject(new Error("Request failed", { cause: error }));
+        },
+      });
+    });
+  }
+
+  triggerEvent(id: NodeId, event: string, params: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       this.#sendRequest(
         "triggerEvent",

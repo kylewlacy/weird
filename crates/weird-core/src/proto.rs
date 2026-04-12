@@ -1,4 +1,4 @@
-use crate::world::{Event, Node, TriggerEvent, WorldDidChangeResponse};
+use crate::world::{Event, InitRequest, InitResponse, Node, TriggerEvent, WorldDidChangeResponse};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct JsonRpcRequest<Body> {
@@ -137,6 +137,8 @@ impl From<i64> for JsonRpcRequestId {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum Request {
+    Init(InitRequest),
+
     #[serde(rename_all = "camelCase")]
     SyncWorld {},
 
@@ -152,6 +154,7 @@ pub enum Request {
 #[serde(untagged)]
 pub enum Response {
     Empty,
+    Init(InitResponse),
     WorldDidChange(WorldDidChangeResponse),
     Event(Event),
 }
@@ -159,6 +162,7 @@ pub enum Response {
 impl Response {
     pub fn kind(&self) -> &'static str {
         match self {
+            Self::Init(_) => "init",
             Self::Empty => "empty",
             Self::WorldDidChange(_) => "worldDidChange",
             Self::Event(_) => "event",

@@ -1,12 +1,12 @@
 use pretty_assertions::assert_eq;
-use weird_core::world::{ElementNodeUpdate, Node, ROOT_NODE_ID};
+use weird_core::world::{ElementNodeUpdate, InitRequest, Node, ROOT_NODE_ID};
 use weird_test_support::{init_world, updated};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_disconnect_marks_windows_as_stale() {
     let (world, _conn_1, _window_1) = init_world([]).await;
 
-    let conn_2 = world.create_connection().await;
+    let (conn_2, _) = world.create_connection(InitRequest {}).await;
     let window_2_a = world
         .append_node(
             Node::element("Window").attr("title", "Window A"),

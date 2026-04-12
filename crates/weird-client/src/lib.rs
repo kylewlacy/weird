@@ -5,7 +5,10 @@ use std::{
     sync::{Arc, atomic::AtomicI64},
 };
 
-use weird_core::proto::{JsonRpcRequest, JsonRpcResponse};
+use weird_core::{
+    proto::{JsonRpcRequest, JsonRpcResponse},
+    world::{InitRequest, InitResponse},
+};
 
 type RpcRequest = JsonRpcRequest<weird_core::proto::Request>;
 type RpcResponse = JsonRpcResponse<weird_core::proto::Response>;
@@ -15,9 +18,52 @@ pub struct WeirdClient {
     next_id: Arc<AtomicI64>,
     request_tx: crossbeam_channel::Sender<RpcRequest>,
     response_rx: crossbeam_channel::Receiver<RpcResponse>,
+    _init_response: InitResponse,
 }
 
 impl WeirdClient {
+    fn init(
+        request_tx: crossbeam_channel::Sender<RpcRequest>,
+        response_rx: crossbeam_channel::Receiver<RpcResponse>,
+        init_request: InitRequest,
+    ) -> Result<Self, WeirdClientError> {
+        let next_id = Arc::new(AtomicI64::new(1));
+        let init_id = next_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+        // Send "init" message
+        request_tx
+            .send(RpcRequest::new(
+                Some(init_id.into()),
+                weird_core::proto::Request::Init(init_request),
+            ))
+            .map_err(|_| WeirdClientError::ChannelClosed)?;
+
+        // Get "init" response
+        let response = response_rx
+            .iter()
+            .find(|response| response.id() == Some(&init_id.into()))
+            .ok_or(WeirdClientError::ChannelClosed)?;
+        let response = match response {
+            JsonRpcResponse::Result(result) => result.result,
+            JsonRpcResponse::Error(error) => {
+                return Err(WeirdClientError::RpcError(error.error));
+            }
+        };
+        let weird_core::proto::Response::Init(init_response) = response else {
+            return Err(WeirdClientError::RpcUnexpectedResponse {
+                expected: "init",
+                actual: response.kind(),
+            });
+        };
+
+        Ok(Self {
+            _init_response: init_response,
+            request_tx,
+            response_rx,
+            next_id,
+        })
+    }
+
     pub fn builder() -> WeirdClientBuilder {
         WeirdClientBuilder(())
     }
@@ -143,11 +189,9 @@ impl WeirdClientBuilder {
                 }
             }
         });
-        Ok(WeirdClient {
-            next_id: Arc::new(AtomicI64::new(1)),
-            request_tx,
-            response_rx,
-        })
+        let init_request = InitRequest {};
+        let client = WeirdClient::init(request_tx, response_rx, init_request)?;
+        Ok(client)
     }
 }
 

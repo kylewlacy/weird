@@ -7,6 +7,7 @@ import { h } from "./elements/utils.ts";
 import clsx from "clsx";
 import { buttonComponent } from "./elements/Button.ts";
 import { selectComponent } from "./elements/Select.ts";
+import type { InitRequest } from "./protocol/types.ts";
 
 const Theme = z.enum(["system", "light", "dark"]);
 
@@ -72,13 +73,6 @@ url.pathname = "/ws";
 const socket = new WebSocket(url);
 const client = new WeirdClient(socket);
 
-const world = new World();
-world.onTriggerEvent = (id, event, params) => {
-  client.triggerEvent(id, event, params);
-};
-
-world.mount(worldEl);
-
 debuggerButton.addEventListener("click", (event) => {
   event.preventDefault();
   const isHidden = debuggerEl.style.display === "none";
@@ -88,8 +82,17 @@ debuggerButton.addEventListener("click", (event) => {
 const dbg = new Debugger();
 dbg.mount(debuggerEl);
 
-socket.addEventListener("open", () => {
+socket.addEventListener("open", async () => {
   console.info("[WebSocket] opened");
+
+  const initRequest: InitRequest = {};
+  const _initResponse = await client.init(initRequest);
+
+  const world = new World();
+  world.onTriggerEvent = (id, event, params) => {
+    client.triggerEvent(id, event, params);
+  };
+  world.mount(worldEl);
 
   client.subscribe({
     event: "syncWorld",

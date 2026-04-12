@@ -16,21 +16,13 @@ pub async fn serve_unix_socket(
 }
 
 async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> anyhow::Result<()> {
-    let world_conn = state.world.create_connection().await;
-    let connection_id = world_conn.id;
-
     let (stream_rx, mut stream_tx) = conn.split();
     let (client_in_tx, client_in_rx) = tokio::sync::mpsc::channel(1);
     let (client_out_tx, mut client_out_rx) = tokio::sync::mpsc::channel(1);
 
     tokio::spawn(
-        handle_conn(state, world_conn, client_in_rx, client_out_tx).instrument(
-            tracing::info_span!(
-                "connection",
-                conn.id = %connection_id,
-                conn.kind = "websocket"
-            ),
-        ),
+        handle_conn(state, client_in_rx, client_out_tx)
+            .instrument(tracing::info_span!("handle_unix_conn", conn.kind = "unix")),
     );
 
     let stream_rx = tokio::io::BufReader::new(stream_rx);

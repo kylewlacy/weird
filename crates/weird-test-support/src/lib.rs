@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use weird_core::world::{
-    Connection, ConnectionId, CreatedNodeChange, DeletedNodeChange, FlatNode, Node, NodeId,
-    NodeUpdate, ROOT_NODE_ID, UpdatedNodeChange, World, WorldChange, WorldDidChangeResponse,
+    Connection, ConnectionId, CreatedNodeChange, DeletedNodeChange, FlatNode, InitRequest, Node,
+    NodeId, NodeUpdate, ROOT_NODE_ID, UpdatedNodeChange, World, WorldChange,
+    WorldDidChangeResponse,
 };
 
 pub async fn render(
@@ -126,7 +127,7 @@ pub async fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Con
         .init();
 
     let world = World::default();
-    let conn = world.create_connection().await;
+    let (conn, _init_response) = world.create_connection(InitRequest {}).await;
 
     let window_id = world
         .append_node(

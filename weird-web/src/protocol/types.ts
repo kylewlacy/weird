@@ -35,6 +35,17 @@ export type JsonRpcResponse = z.infer<typeof JsonRpcResponse>;
 export const NodeId = z.string().brand("NodeId");
 export type NodeId = z.infer<typeof NodeId>;
 
+export const ConnectionId = z.string().brand("ConnectionId");
+export type ConnectionId = z.infer<typeof ConnectionId>;
+
+export const InitRequest = z.object({});
+export type InitRequest = z.infer<typeof InitRequest>;
+
+export const InitResponse = z.object({
+  connectionId: ConnectionId,
+});
+export type InitResponse = z.infer<typeof InitResponse>;
+
 export const FlatElement = z.object({
   tag: z.string(),
   attributes: z.record(z.string(), z.unknown()),
