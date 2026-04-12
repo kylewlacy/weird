@@ -72,3 +72,13 @@
     @slot;
   }
 }
+
+.weird-graphviz {
+  --default-stroke: currentColor;
+  --default-fill: currentColor;
+
+  text {
+    font-family: inherit;
+    fill: currentColor;
+  }
+}

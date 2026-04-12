@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",
+    "@viz-js/viz": "^3.25.0",
     "clsx": "^2.1.1",
     "tailwindcss": "^4.2.2",
     "ts-unreachable": "^2.0.0",
