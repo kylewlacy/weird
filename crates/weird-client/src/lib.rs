@@ -65,7 +65,7 @@ impl WeirdClient {
     }
 
     pub fn builder() -> WeirdClientBuilder {
-        WeirdClientBuilder(())
+        WeirdClientBuilder { app: None }
     }
 
     fn request(
@@ -130,9 +130,16 @@ impl WeirdClient {
     }
 }
 
-pub struct WeirdClientBuilder(());
+pub struct WeirdClientBuilder {
+    app: Option<String>,
+}
 
 impl WeirdClientBuilder {
+    pub fn app(mut self, app: &str) -> Self {
+        self.app = Some(app.to_string());
+        self
+    }
+
     pub fn connect(self) -> Result<WeirdClient, WeirdClientError> {
         let socket_path = if let Some(socket_path) = std::env::var_os("WEIRD_SOCKET") {
             PathBuf::from(socket_path)
@@ -191,6 +198,7 @@ impl WeirdClientBuilder {
         });
         let init_request = InitRequest {
             client: Some("weird-client".to_string()),
+            app: self.app,
             ..Default::default()
         };
         let client = WeirdClient::init(request_tx, response_rx, init_request)?;

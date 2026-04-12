@@ -89,6 +89,7 @@ socket.addEventListener("open", async () => {
   const initRequest: InitRequest = {
     weirdProtocolVersion: CURRENT_PROTOCOL_VERSION,
     client: "weird-web",
+    app: "weird-web",
   };
   const initResponse = await client.init(initRequest);
   if (initRequest.weirdProtocolVersion !== initResponse.weirdProtocolVersion) {

@@ -787,6 +787,7 @@ impl WeirdProtocolVersion {
 pub struct InitRequest {
     pub weird_protocol_version: WeirdProtocolVersion,
     pub client: Option<String>,
+    pub app: Option<String>,
 }
 
 impl Default for InitRequest {
@@ -794,6 +795,7 @@ impl Default for InitRequest {
         Self {
             weird_protocol_version: WeirdProtocolVersion::CURRENT,
             client: None,
+            app: None,
         }
     }
 }
@@ -1276,6 +1278,7 @@ pub struct ConnectionDetails {
     connected: bool,
     weird_protocol_version: WeirdProtocolVersion,
     client: Option<String>,
+    app: Option<String>,
 }
 
 impl ConnectionDetails {
@@ -1284,8 +1287,9 @@ impl ConnectionDetails {
             connection_id,
             source: conn.source.clone(),
             connected: conn.connected,
-            client: conn.init_request.client.clone(),
             weird_protocol_version: conn.weird_protocol_version,
+            client: conn.init_request.client.clone(),
+            app: conn.init_request.app.clone(),
         }
     }
 }

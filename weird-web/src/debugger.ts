@@ -491,11 +491,26 @@ function connectionEl(opts: ConnectionElementOptions): HTMLLIElement {
   return h(
     "li",
     { className: clsx("flex gap-x-2 items-baseline py-0.5") },
-    h("span", { className: clsx("font-mono") }, `id=${opts.conn.connectionId}`),
+    h(
+      "span",
+      {
+        className: clsx(
+          opts.conn.app != null
+            ? undefined
+            : "text-gray-600 dark:text-gray-400",
+        ),
+      },
+      opts.conn.app ?? "(no name)",
+    ),
+    h(
+      "span",
+      { className: clsx("font-mono text-gray-600 dark:text-gray-400") },
+      `id=${opts.conn.connectionId}`,
+    ),
     opts.conn.client != null
       ? h(
           "span",
-          { className: clsx("font-mono") },
+          { className: clsx("font-mono text-gray-600 dark:text-gray-400") },
           `client=${opts.conn.client}`,
         )
       : undefined,

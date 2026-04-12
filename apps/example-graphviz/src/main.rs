@@ -2,7 +2,10 @@ use weird_client::WeirdClient;
 use weird_core::world::Node;
 
 fn main() {
-    let weird = WeirdClient::builder().connect().unwrap();
+    let weird = WeirdClient::builder()
+        .app("example-graphviz")
+        .connect()
+        .unwrap();
 
     let mut engine = "dot".to_string();
 

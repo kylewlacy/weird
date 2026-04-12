@@ -43,7 +43,8 @@ export type WeirdProtocolVersion = z.infer<typeof WeirdProtocolVersion>;
 
 export const InitRequest = z.object({
   weirdProtocolVersion: WeirdProtocolVersion,
-  client: z.string().optional(),
+  client: z.string().nullish(),
+  app: z.string().nullish(),
 });
 export type InitRequest = z.infer<typeof InitRequest>;
 
@@ -129,6 +130,7 @@ export const ConnectionDetails = z.object({
   connected: z.boolean(),
   weirdProtocolVersion: WeirdProtocolVersion,
   client: z.string().nullish(),
+  app: z.string().nullish(),
 });
 export type ConnectionDetails = z.infer<typeof ConnectionDetails>;
 
