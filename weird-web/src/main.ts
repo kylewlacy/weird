@@ -8,6 +8,7 @@ import clsx from "clsx";
 import { buttonComponent } from "./elements/Button.ts";
 import { selectComponent } from "./elements/Select.ts";
 import type { InitRequest } from "./protocol/types.ts";
+import unreachable from "ts-unreachable";
 
 const Theme = z.enum(["system", "light", "dark"]);
 
@@ -109,6 +110,20 @@ socket.addEventListener("open", async () => {
     on: (event) => {
       world.handleWorldDidChangeEvent(event);
       dbg.handleWorldDidChangeEvent(event);
+    },
+  });
+
+  client.subscribe({
+    event: "syncConnections",
+    params: {},
+    on: (event) => {
+      if (!("type" in event) && "connections" in event) {
+        dbg.setConnections(event.connections, initResponse);
+      } else if ("type" in event) {
+        dbg.handleConnectionEvent(event);
+      } else {
+        return unreachable(event);
+      }
     },
   });
 });

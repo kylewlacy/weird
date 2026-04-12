@@ -156,8 +156,12 @@ export const Events = {
     request: z.object({}),
     response: WorldDidChangeResponse,
   },
+  syncConnections: {
+    request: z.object({}),
+    response: SyncConnectionsResponse,
+  },
 } as const satisfies {
-  [K in EventType]: { request: z.ZodObject; response: z.ZodObject };
+  [K in EventType]: { request: z.ZodObject; response: z.ZodType };
 };
 
 export type EventParams<E extends EventType> = z.output<

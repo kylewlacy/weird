@@ -1,6 +1,10 @@
-import { h } from "./elements/utils.ts";
+import { h, type Children, type ElementProperties } from "./elements/utils.ts";
 import type {
+  ConnectionDetails,
+  ConnectionEvent,
+  ConnectionId,
   FlatNode,
+  InitResponse,
   NodeId,
   WorldDidChangeResponse,
 } from "./protocol/types.ts";
@@ -18,6 +22,12 @@ type DebuggerTabId = (typeof DEBUGGER_TABS)[number]["id"];
 
 export class Debugger {
   #nodes: Record<NodeId, TreeNode>;
+  #connections: ConnectionDetails[] = [];
+  #connectionId: ConnectionId | undefined;
+  #connectedConnections: HTMLUListElement;
+  #disconnectedConnections: HTMLUListElement;
+  #connectedConnectionsLabel: Text;
+  #disconnectedConnectionsLabel: Text;
   #tabs: Record<DebuggerTabId, HTMLButtonElement>;
   #tabPanels: Record<DebuggerTabId, HTMLDivElement>;
   #selectedTab: DebuggerTabId = "tree";
@@ -49,7 +59,36 @@ export class Debugger {
         },
         rootNode.dom,
       ),
-      connections: h("div", {}, "Connections!"),
+      connections: h(
+        "div",
+        {},
+        h(
+          "details",
+          {},
+          h(
+            "summary",
+            { className: clsx("font-bold") },
+            (this.#connectedConnectionsLabel =
+              document.createTextNode("Connected (?)")),
+          ),
+          (this.#connectedConnections = h("ul", {
+            className: clsx("list-disc list-inside pl-4"),
+          })),
+        ),
+        h(
+          "details",
+          {},
+          h(
+            "summary",
+            {},
+            (this.#disconnectedConnectionsLabel =
+              document.createTextNode("Disconnected (?)")),
+          ),
+          (this.#disconnectedConnections = h("ul", {
+            className: clsx("list-disc list-inside pl-4"),
+          })),
+        ),
+      ),
     } satisfies Record<DebuggerTabId, Node>;
     this.#tabPanels = Object.fromEntries(
       Object.entries(panels).map(([id, panel]) => {
@@ -249,6 +288,78 @@ export class Debugger {
       }
     }
   }
+
+  setConnections(connections: ConnectionDetails[], initResponse: InitResponse) {
+    this.#connections = [...connections];
+    this.#connectionId = initResponse.connectionId;
+    const connectedEls: HTMLElement[] = [];
+    const disconnectedEls: HTMLElement[] = [];
+
+    for (const conn of connections) {
+      const connEl = connectionEl({
+        conn,
+        isCurrent: conn.connectionId === initResponse.connectionId,
+      });
+      if (conn.connected) {
+        connectedEls.push(connEl);
+      } else {
+        disconnectedEls.push(connEl);
+      }
+    }
+
+    this.#connectedConnections.replaceChildren(...connectedEls);
+    this.#disconnectedConnections.replaceChildren(...disconnectedEls);
+
+    this.#connectedConnectionsLabel.textContent = `Connected (${connectedEls.length})`;
+    this.#disconnectedConnectionsLabel.textContent = `Disconnected (${disconnectedEls.length})`;
+  }
+
+  handleConnectionEvent(event: ConnectionEvent) {
+    // TODO: Handle connection events more efficiently, instead of recreating
+    // the whole DOM!
+    switch (event.type) {
+      case "connected": {
+        const conn: ConnectionDetails & { type?: string } = { ...event };
+        delete conn.type;
+        this.#connections.push(conn);
+        this.#didUpdateConnections();
+        break;
+      }
+      case "disconnected":
+        for (const conn of this.#connections) {
+          if (conn.connectionId === event.connectionId) {
+            conn.connected = false;
+          }
+        }
+        this.#didUpdateConnections();
+        break;
+      default:
+        break;
+    }
+  }
+
+  #didUpdateConnections() {
+    const connectedEls: HTMLElement[] = [];
+    const disconnectedEls: HTMLElement[] = [];
+
+    for (const conn of this.#connections) {
+      const connEl = connectionEl({
+        conn,
+        isCurrent: conn.connectionId === this.#connectionId,
+      });
+      if (conn.connected) {
+        connectedEls.push(connEl);
+      } else {
+        disconnectedEls.push(connEl);
+      }
+    }
+
+    this.#connectedConnections.replaceChildren(...connectedEls);
+    this.#disconnectedConnections.replaceChildren(...disconnectedEls);
+
+    this.#connectedConnectionsLabel.textContent = `Connected (${connectedEls.length})`;
+    this.#disconnectedConnectionsLabel.textContent = `Disconnected (${disconnectedEls.length})`;
+  }
 }
 
 type TreeNode =
@@ -350,4 +461,42 @@ function treeNode(node: FlatNode, parentId: NodeId | null): TreeNode {
       domSlot,
     };
   }
+}
+
+interface ConnectionElementOptions {
+  conn: ConnectionDetails;
+  isCurrent: boolean;
+}
+
+function connectionEl(opts: ConnectionElementOptions): HTMLLIElement {
+  return h(
+    "li",
+    { className: clsx("flex gap-x-2 items-baseline") },
+    h("span", { className: clsx("font-mono") }, `id=${opts.conn.connectionId}`),
+    opts.conn.client != null
+      ? h(
+          "span",
+          { className: clsx("font-mono") },
+          `client=${opts.conn.client}`,
+        )
+      : undefined,
+    opts.isCurrent ? connectionBadge({}, "this") : undefined,
+  );
+}
+
+function connectionBadge(
+  attrs: ElementProperties<HTMLSpanElement> = {},
+  ...children: Children[]
+): HTMLSpanElement {
+  return h(
+    "span",
+    {
+      className: clsx(
+        "px-1 border-2 bg-zinc-100 border-zinc-400 dark:bg-zinc-700 dark:border-zinc-500",
+        attrs.className,
+      ),
+      ...attrs,
+    },
+    ...children,
+  );
 }
