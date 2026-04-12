@@ -43,6 +43,7 @@ export type WeirdProtocolVersion = z.infer<typeof WeirdProtocolVersion>;
 
 export const InitRequest = z.object({
   weirdProtocolVersion: WeirdProtocolVersion,
+  client: z.string().optional(),
 });
 export type InitRequest = z.infer<typeof InitRequest>;
 

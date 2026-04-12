@@ -716,12 +716,14 @@ impl WeirdProtocolVersion {
 #[serde(rename_all = "camelCase")]
 pub struct InitRequest {
     pub weird_protocol_version: WeirdProtocolVersion,
+    pub client: Option<String>,
 }
 
 impl Default for InitRequest {
     fn default() -> Self {
         Self {
             weird_protocol_version: WeirdProtocolVersion::CURRENT,
+            client: None,
         }
     }
 }

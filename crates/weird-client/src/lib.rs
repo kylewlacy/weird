@@ -189,7 +189,10 @@ impl WeirdClientBuilder {
                 }
             }
         });
-        let init_request = InitRequest::default();
+        let init_request = InitRequest {
+            client: Some("weird-client".to_string()),
+            ..Default::default()
+        };
         let client = WeirdClient::init(request_tx, response_rx, init_request)?;
         Ok(client)
     }
