@@ -18,67 +18,8 @@ pub struct WeirdClient {
 }
 
 impl WeirdClient {
-    pub fn connect() -> Result<Self, WeirdClientError> {
-        let socket_path = if let Some(socket_path) = std::env::var_os("WEIRD_SOCKET") {
-            PathBuf::from(socket_path)
-        } else {
-            let runtime_dir =
-                std::env::var_os("XDG_RUNTIME_DIR").ok_or(WeirdClientError::EnvVarNotSet {
-                    env_var: "XDG_RUNTIME_DIR",
-                })?;
-            Path::new(&runtime_dir).join("weird.sock")
-        };
-        let stream = UnixStream::connect(&socket_path)?;
-        let read_stream = stream.try_clone()?;
-        let read_stream = std::io::BufReader::new(read_stream);
-        let write_stream = stream;
-
-        let (request_tx, request_rx) = crossbeam_channel::unbounded();
-        let (response_tx, response_rx) = crossbeam_channel::unbounded();
-
-        // TODO: Use some other way of error reporting beside eprintln!
-        std::thread::spawn(move || {
-            for line in read_stream.lines() {
-                let line = match line {
-                    Ok(line) => line,
-                    Err(error) => {
-                        eprintln!("error reading from weird socket: {error:#}");
-                        continue;
-                    }
-                };
-                let message =
-                    serde_json::from_str::<JsonRpcResponse<weird_core::proto::Response>>(&line);
-                let message = match message {
-                    Ok(message) => message,
-                    Err(error) => {
-                        eprintln!("error deserializing line from weird socket: {error:#}");
-                        continue;
-                    }
-                };
-                let send_result = response_tx.send(message);
-                if send_result.is_err() {
-                    break;
-                }
-            }
-        });
-        std::thread::spawn(move || {
-            while let Ok(message) = request_rx.recv() {
-                let result = serde_json::to_writer(&write_stream, &message);
-                if let Err(error) = result {
-                    eprintln!("error writing to weird socket: {error:#}");
-                }
-
-                let result = writeln!(&write_stream);
-                if let Err(error) = result {
-                    eprintln!("error writing to weird socket: {error:#}");
-                }
-            }
-        });
-        Ok(Self {
-            next_id: Arc::new(AtomicI64::new(1)),
-            request_tx,
-            response_rx,
-        })
+    pub fn builder() -> WeirdClientBuilder {
+        WeirdClientBuilder(())
     }
 
     fn request(
@@ -140,6 +81,73 @@ impl WeirdClient {
             }),
             Err(error) => Err(error),
         }
+    }
+}
+
+pub struct WeirdClientBuilder(());
+
+impl WeirdClientBuilder {
+    pub fn connect(self) -> Result<WeirdClient, WeirdClientError> {
+        let socket_path = if let Some(socket_path) = std::env::var_os("WEIRD_SOCKET") {
+            PathBuf::from(socket_path)
+        } else {
+            let runtime_dir =
+                std::env::var_os("XDG_RUNTIME_DIR").ok_or(WeirdClientError::EnvVarNotSet {
+                    env_var: "XDG_RUNTIME_DIR",
+                })?;
+            Path::new(&runtime_dir).join("weird.sock")
+        };
+        let stream = UnixStream::connect(&socket_path)?;
+        let read_stream = stream.try_clone()?;
+        let read_stream = std::io::BufReader::new(read_stream);
+        let write_stream = stream;
+
+        let (request_tx, request_rx) = crossbeam_channel::unbounded();
+        let (response_tx, response_rx) = crossbeam_channel::unbounded();
+
+        // TODO: Use some other way of error reporting beside eprintln!
+        std::thread::spawn(move || {
+            for line in read_stream.lines() {
+                let line = match line {
+                    Ok(line) => line,
+                    Err(error) => {
+                        eprintln!("error reading from weird socket: {error:#}");
+                        continue;
+                    }
+                };
+                let message =
+                    serde_json::from_str::<JsonRpcResponse<weird_core::proto::Response>>(&line);
+                let message = match message {
+                    Ok(message) => message,
+                    Err(error) => {
+                        eprintln!("error deserializing line from weird socket: {error:#}");
+                        continue;
+                    }
+                };
+                let send_result = response_tx.send(message);
+                if send_result.is_err() {
+                    break;
+                }
+            }
+        });
+        std::thread::spawn(move || {
+            while let Ok(message) = request_rx.recv() {
+                let result = serde_json::to_writer(&write_stream, &message);
+                if let Err(error) = result {
+                    eprintln!("error writing to weird socket: {error:#}");
+                }
+
+                let result = writeln!(&write_stream);
+                if let Err(error) = result {
+                    eprintln!("error writing to weird socket: {error:#}");
+                }
+            }
+        });
+        Ok(WeirdClient {
+            next_id: Arc::new(AtomicI64::new(1)),
+            request_tx,
+            response_rx,
+        })
     }
 }
 

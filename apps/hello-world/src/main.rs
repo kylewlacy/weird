@@ -4,7 +4,7 @@ use weird_core::world::Node;
 const DELAY: std::time::Duration = std::time::Duration::from_millis(500);
 
 fn main() {
-    let weird = WeirdClient::connect().unwrap();
+    let weird = WeirdClient::builder().connect().unwrap();
 
     let mut name = "".to_string();
     let mut message: Option<String> = None;
