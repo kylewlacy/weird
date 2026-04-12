@@ -1,6 +1,6 @@
 import z from "zod";
 import { Debugger } from "./debugger.ts";
-import { WeirdClient } from "./protocol/client.ts";
+import { CURRENT_PROTOCOL_VERSION, WeirdClient } from "./protocol/client.ts";
 import "./styles/main.css";
 import { World } from "./world.ts";
 import { h } from "./elements/utils.ts";
@@ -85,8 +85,16 @@ dbg.mount(debuggerEl);
 socket.addEventListener("open", async () => {
   console.info("[WebSocket] opened");
 
-  const initRequest: InitRequest = {};
-  const _initResponse = await client.init(initRequest);
+  const initRequest: InitRequest = {
+    weirdProtocolVersion: CURRENT_PROTOCOL_VERSION,
+  };
+  const initResponse = await client.init(initRequest);
+  if (initRequest.weirdProtocolVersion !== initResponse.weirdProtocolVersion) {
+    console.error("Protocol version mismatch", { initRequest, initResponse });
+    throw new Error(
+      `Protocol version mismatch! Expected '${initRequest.weirdProtocolVersion}', but got '${initResponse.weirdProtocolVersion}'`,
+    );
+  }
 
   const world = new World();
   world.onTriggerEvent = (id, event, params) => {

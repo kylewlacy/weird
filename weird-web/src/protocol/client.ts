@@ -9,7 +9,11 @@ import {
   NodeId,
   InitRequest,
   InitResponse,
+  WeirdProtocolVersion,
 } from "./types";
+
+export const CURRENT_PROTOCOL_VERSION =
+  "0.1.0" as const satisfies WeirdProtocolVersion;
 
 export class WeirdClient {
   #nextId: number = 1;

@@ -6,7 +6,10 @@ use weird_test_support::{init_world, updated};
 async fn test_disconnect_marks_windows_as_stale() {
     let (world, _conn_1, _window_1) = init_world([]).await;
 
-    let (conn_2, _) = world.create_connection(InitRequest {}).await;
+    let (conn_2, _) = world
+        .create_connection(InitRequest::default())
+        .await
+        .unwrap();
     let window_2_a = world
         .append_node(
             Node::element("Window").attr("title", "Window A"),

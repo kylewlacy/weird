@@ -13,7 +13,10 @@ pub struct World {
 }
 
 impl World {
-    pub async fn create_connection(&self, _init: InitRequest) -> (Connection, InitResponse) {
+    pub async fn create_connection(
+        &self,
+        init_request: InitRequest,
+    ) -> Result<(Connection, InitResponse), CreateConnectionError> {
         let id = self
             .next_connection_id
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -29,10 +32,19 @@ impl World {
         };
         state.connections.insert(id, inner);
 
+        let weird_protocol_version = WeirdProtocolVersion::CURRENT;
+        if init_request.weird_protocol_version != weird_protocol_version {
+            return Err(CreateConnectionError::ProtocolVersionMismatch {
+                client: init_request.weird_protocol_version,
+                current: weird_protocol_version,
+            });
+        }
+
         let response = InitResponse {
+            weird_protocol_version,
             connection_id: conn.id,
         };
-        (conn, response)
+        Ok((conn, response))
     }
 
     pub async fn get_nodes(&self) -> BTreeMap<NodeId, Arc<FlatNode>> {
@@ -690,13 +702,34 @@ impl Drop for Connection {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum WeirdProtocolVersion {
+    #[serde(rename = "0.1.0")]
+    V0_1_0,
+}
+
+impl WeirdProtocolVersion {
+    pub const CURRENT: Self = Self::V0_1_0;
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InitRequest {}
+pub struct InitRequest {
+    pub weird_protocol_version: WeirdProtocolVersion,
+}
+
+impl Default for InitRequest {
+    fn default() -> Self {
+        Self {
+            weird_protocol_version: WeirdProtocolVersion::CURRENT,
+        }
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InitResponse {
+    weird_protocol_version: WeirdProtocolVersion,
     connection_id: ConnectionId,
 }
 
@@ -1154,6 +1187,15 @@ impl ElementNodeUpdate {
         self.clear_attributes.insert(name.into());
         self
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CreateConnectionError {
+    #[error("protocol version mismatch: client expects {client:?}, current is {current:?}")]
+    ProtocolVersionMismatch {
+        client: WeirdProtocolVersion,
+        current: WeirdProtocolVersion,
+    },
 }
 
 #[derive(Debug)]

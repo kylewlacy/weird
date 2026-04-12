@@ -127,7 +127,10 @@ pub async fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Con
         .init();
 
     let world = World::default();
-    let (conn, _init_response) = world.create_connection(InitRequest {}).await;
+    let (conn, _init_response) = world
+        .create_connection(InitRequest::default())
+        .await
+        .unwrap();
 
     let window_id = world
         .append_node(

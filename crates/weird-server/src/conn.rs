@@ -39,7 +39,28 @@ pub async fn handle_conn(
         return;
     };
 
-    let (mut conn, init_response) = state.world.create_connection(init_request_body).await;
+    let conn_result = state.world.create_connection(init_request_body).await;
+    let (mut conn, init_response) = match conn_result {
+        Ok(conn) => conn,
+        Err(error) => {
+            let init_response = JsonRpcResponse::error(
+                init_request.id,
+                JsonRpcError {
+                    code: 6,
+                    data: serde_json::Value::Null,
+                    message: error.to_string(),
+                },
+            );
+            let out_result = client_out.send(init_response).await;
+            match out_result {
+                Ok(()) => {}
+                Err(error) => {
+                    tracing::warn!("failed to send response: {error}");
+                }
+            }
+            return;
+        }
+    };
     let init_response = JsonRpcResponse::result(init_request.id, Response::Init(init_response));
     let out_result = client_out.send(init_response).await;
     match out_result {

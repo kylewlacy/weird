@@ -38,10 +38,16 @@ export type NodeId = z.infer<typeof NodeId>;
 export const ConnectionId = z.string().brand("ConnectionId");
 export type ConnectionId = z.infer<typeof ConnectionId>;
 
-export const InitRequest = z.object({});
+export const WeirdProtocolVersion = z.enum(["0.1.0"]);
+export type WeirdProtocolVersion = z.infer<typeof WeirdProtocolVersion>;
+
+export const InitRequest = z.object({
+  weirdProtocolVersion: WeirdProtocolVersion,
+});
 export type InitRequest = z.infer<typeof InitRequest>;
 
 export const InitResponse = z.object({
+  weirdProtocolVersion: WeirdProtocolVersion,
   connectionId: ConnectionId,
 });
 export type InitResponse = z.infer<typeof InitResponse>;
