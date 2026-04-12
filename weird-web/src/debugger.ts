@@ -8,25 +8,84 @@ import { ROOT_NODE_ID } from "./world.ts";
 import { ELEMENTS } from "./elements/index.ts";
 import clsx from "clsx";
 import unreachable from "ts-unreachable";
+import { buttonComponent } from "./elements/Button.ts";
+
+const DEBUGGER_TABS = [
+  { label: "Tree", id: "tree" },
+  { label: "Connections", id: "connections" },
+] as const;
+type DebuggerTabId = (typeof DEBUGGER_TABS)[number]["id"];
 
 export class Debugger {
-  #tree: HTMLElement;
   #nodes: Record<NodeId, TreeNode>;
+  #tabs: Record<DebuggerTabId, HTMLButtonElement>;
+  #tabPanels: Record<DebuggerTabId, HTMLDivElement>;
+  #selectedTab: DebuggerTabId = "tree";
 
   #dom: HTMLElement;
 
   constructor() {
     const rootNode = treeNode({ tag: "World", attributes: {} }, null);
 
+    this.#tabs = Object.fromEntries(
+      DEBUGGER_TABS.map((tab) => {
+        const tabEl = buttonComponent(
+          { ariaSelected: this.#selectedTab === tab.id ? "true" : "false" },
+          tab.label,
+        );
+        tabEl.addEventListener("click", (e) => {
+          e.preventDefault();
+          this.#setSelectedTab(tab.id);
+        });
+        return [tab.id, tabEl];
+      }),
+    ) as Record<DebuggerTabId, HTMLButtonElement>;
+
+    const panels = {
+      tree: h(
+        "ul",
+        {
+          className: clsx("overflow-hidden w-full leading-6"),
+        },
+        rootNode.dom,
+      ),
+      connections: h("div", {}, "Connections!"),
+    } satisfies Record<DebuggerTabId, Node>;
+    this.#tabPanels = Object.fromEntries(
+      Object.entries(panels).map(([id, panel]) => {
+        const tabPanel = h(
+          "div",
+          {
+            role: "tabpanel",
+            style: { display: id === this.#selectedTab ? "" : "none" },
+          },
+          panel,
+        );
+        tabPanel.ariaLabelledByElements = [this.#tabs[id as DebuggerTabId]];
+        return [id, tabPanel];
+      }),
+    ) as Record<DebuggerTabId, HTMLDivElement>;
+
     this.#nodes = { [ROOT_NODE_ID]: rootNode };
-    this.#tree = h(
-      "ul",
-      {
-        className: clsx("overflow-hidden w-full leading-6"),
-      },
-      rootNode.dom,
+    this.#dom = h(
+      "div",
+      {},
+      h(
+        "div",
+        { role: "tablist", className: clsx("flex gap-2 mb-2") },
+        ...Object.values(this.#tabs),
+      ),
+      ...Object.values(this.#tabPanels),
     );
-    this.#dom = h("div", {}, "Tree", this.#tree);
+  }
+
+  #setSelectedTab(tabId: DebuggerTabId) {
+    for (const [id, tabEl] of Object.entries(this.#tabs)) {
+      tabEl.ariaSelected = id === tabId ? "true" : "false";
+    }
+    for (const [id, panelEl] of Object.entries(this.#tabPanels)) {
+      panelEl.style.display = id === tabId ? "" : "none";
+    }
   }
 
   mount(element: HTMLElement) {
