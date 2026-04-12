@@ -40,6 +40,7 @@ pub async fn handle_conn(
         return;
     };
 
+    let app_name = init_request_body.app.clone();
     let conn_result = state
         .world
         .create_connection(init_request_body, source)
@@ -246,6 +247,7 @@ pub async fn handle_conn(
                                     .world
                                     .append_node(
                                         weird_core::world::Element::new("Window")
+                                            .attr_optional("title", app_name.as_ref())
                                             .children(render)
                                             .into(),
                                         ROOT_NODE_ID,

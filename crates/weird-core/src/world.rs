@@ -969,6 +969,18 @@ impl Element {
         self
     }
 
+    pub fn attr_optional(
+        self,
+        name: impl Into<String>,
+        value: Option<impl serde::Serialize>,
+    ) -> Self {
+        let Some(value) = value else {
+            return self;
+        };
+
+        self.attr(name, value)
+    }
+
     pub fn id(self, id: impl Into<String>) -> Self {
         self.attr("id", id.into())
     }
