@@ -342,9 +342,14 @@ impl WorldState {
             let parent = self.parents.remove(&node_id);
             let children = self.children.remove(&node_id);
             if let Some(conn_id) = conn_id
-                && let Some(conn_node_ids) = self.nodes_by_connection.get_mut(&conn_id)
+                && let std::collections::btree_map::Entry::Occupied(mut conn_node_entry) =
+                    self.nodes_by_connection.entry(conn_id)
             {
+                let conn_node_ids = conn_node_entry.get_mut();
                 conn_node_ids.remove(&node_id);
+                if conn_node_ids.is_empty() {
+                    conn_node_entry.remove();
+                }
             }
 
             // Track the parent node
