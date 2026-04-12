@@ -36,11 +36,11 @@ export function buttonComponent(
   return h(
     "button",
     {
+      ...attrs,
       className: clsx(
         "px-2 bg-white border-2 border-black shadow-sm hover:shadow-sm/50 hover:bg-zinc-200 focus-visible:shadow-sm/50 focus-visible:bg-zinc-200 aria-selected:bg-zinc-300 active:bg-zinc-300 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:hover:bg-zinc-700 dark:focus-visible:bg-zinc-700 dark:aria-selected:bg-zinc-600 dark:active:bg-zinc-600 dark:shadow-md",
         attrs.className,
       ),
-      ...attrs,
     },
     ...children,
   );

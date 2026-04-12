@@ -229,10 +229,11 @@ function titlebarButtonComponent(
   return h(
     "button",
     {
+      ...attrs,
       className: clsx(
         "text-xs font-semibold w-6 h-6 m-0.5 bg-white border-2 border-black shadow-xs hover:shadow-xs/25 hover:bg-zinc-200 focus-visible:bg-zinc-200 active:bg-zinc-300 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:hover:bg-zinc-700 dark:focus-visible:bg-zinc-700 dark:active:bg-zinc-600",
+        attrs.className,
       ),
-      ...attrs,
     },
     ...children,
   );
