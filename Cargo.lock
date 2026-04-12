@@ -178,6 +178,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-graphviz"
+version = "0.1.0"
+dependencies = [
+ "weird-client",
+ "weird-core",
+]
+
+[[package]]
 name = "form_urlencoded"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

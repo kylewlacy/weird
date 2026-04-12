@@ -1,0 +1,8 @@
+[package]
+name = "example-graphviz"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+weird-client = { path = "../../crates/weird-client" }
+weird-core = { path = "../../crates/weird-core" }

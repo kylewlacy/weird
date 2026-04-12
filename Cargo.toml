@@ -2,7 +2,7 @@
 resolver = "3"
 default-members = ["crates/weird-server"]
 members = [
-    "apps/hello-world",
+    "apps/*",
     "crates/weird-client",
     "crates/weird-core",
     "crates/weird-server",
