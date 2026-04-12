@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use tracing::Instrument;
 use weird_core::{
     proto::{JsonRpcError, JsonRpcRequest, JsonRpcRequestId, JsonRpcResponse, Request, Response},
-    world::{ROOT_NODE_ID, World},
+    world::{ConnectionSource, ROOT_NODE_ID, World},
 };
 
 #[derive(Clone)]
@@ -13,6 +13,7 @@ pub struct AppState {
 
 pub async fn handle_conn(
     state: AppState,
+    source: ConnectionSource,
     mut client_in: tokio::sync::mpsc::Receiver<JsonRpcRequest<Request>>,
     client_out: tokio::sync::mpsc::Sender<JsonRpcResponse<Response>>,
 ) {
@@ -39,7 +40,10 @@ pub async fn handle_conn(
         return;
     };
 
-    let conn_result = state.world.create_connection(init_request_body).await;
+    let conn_result = state
+        .world
+        .create_connection(init_request_body, source)
+        .await;
     let (mut conn, init_response) = match conn_result {
         Ok(conn) => conn,
         Err(error) => {

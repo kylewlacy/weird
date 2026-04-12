@@ -115,8 +115,17 @@ export const WorldDidChangeResponse = z.object({
 });
 export type WorldDidChangeResponse = z.infer<typeof WorldDidChangeResponse>;
 
+export const ConnectionSource = z
+  .discriminatedUnion("type", [
+    z.object({ type: z.literal("websocket") }),
+    z.object({ type: z.literal("unixSocket") }),
+    z.object({ type: z.literal("other") }),
+  ])
+  .or(z.object({ type: z.string() }));
+
 export const ConnectionDetails = z.object({
   connectionId: ConnectionId,
+  source: ConnectionSource,
   connected: z.boolean(),
   weirdProtocolVersion: WeirdProtocolVersion,
   client: z.string().nullish(),

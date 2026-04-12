@@ -469,9 +469,28 @@ interface ConnectionElementOptions {
 }
 
 function connectionEl(opts: ConnectionElementOptions): HTMLLIElement {
+  let sourceBadgeClass: string;
+  switch (opts.conn.source.type) {
+    case "websocket":
+      sourceBadgeClass = clsx(
+        "bg-violet-100 border-violet-400 dark:bg-violet-700 dark:border-violet-500",
+      );
+      break;
+    case "unixSocket":
+      sourceBadgeClass = clsx(
+        "bg-green-100 border-green-400 dark:bg-green-700 dark:border-green-500",
+      );
+      break;
+    default:
+      sourceBadgeClass = clsx(
+        "bg-zinc-100 border-zinc-400 dark:bg-zinc-700 dark:border-zinc-500",
+      );
+      break;
+  }
+
   return h(
     "li",
-    { className: clsx("flex gap-x-2 items-baseline") },
+    { className: clsx("flex gap-x-2 items-baseline py-0.5") },
     h("span", { className: clsx("font-mono") }, `id=${opts.conn.connectionId}`),
     opts.conn.client != null
       ? h(
@@ -480,7 +499,17 @@ function connectionEl(opts: ConnectionElementOptions): HTMLLIElement {
           `client=${opts.conn.client}`,
         )
       : undefined,
-    opts.isCurrent ? connectionBadge({}, "this") : undefined,
+    connectionBadge({ className: sourceBadgeClass }, opts.conn.source.type),
+    opts.isCurrent
+      ? connectionBadge(
+          {
+            className: clsx(
+              "bg-zinc-100 border-zinc-400 dark:bg-zinc-700 dark:border-zinc-500",
+            ),
+          },
+          "current",
+        )
+      : undefined,
   );
 }
 
@@ -491,11 +520,8 @@ function connectionBadge(
   return h(
     "span",
     {
-      className: clsx(
-        "px-1 border-2 bg-zinc-100 border-zinc-400 dark:bg-zinc-700 dark:border-zinc-500",
-        attrs.className,
-      ),
       ...attrs,
+      className: clsx("px-1 border-2", attrs.className),
     },
     ...children,
   );

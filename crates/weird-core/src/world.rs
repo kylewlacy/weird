@@ -17,6 +17,7 @@ impl World {
     pub async fn create_connection(
         &self,
         init_request: InitRequest,
+        source: ConnectionSource,
     ) -> Result<(Connection, InitResponse), CreateConnectionError> {
         let weird_protocol_version = WeirdProtocolVersion::CURRENT;
         if init_request.weird_protocol_version != weird_protocol_version {
@@ -34,6 +35,7 @@ impl World {
         let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
         let inner = ConnectionInner {
             connected: true,
+            source,
             init_request,
             weird_protocol_version,
             event_tx,
@@ -724,6 +726,7 @@ fn node_update(current: &FlatNode, updated: &FlatNode) -> Option<NodeUpdate> {
 }
 
 struct ConnectionInner {
+    source: ConnectionSource,
     connected: bool,
     init_request: InitRequest,
     weird_protocol_version: WeirdProtocolVersion,
@@ -1269,6 +1272,7 @@ pub enum ConnectionEvent {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionDetails {
     connection_id: ConnectionId,
+    source: ConnectionSource,
     connected: bool,
     weird_protocol_version: WeirdProtocolVersion,
     client: Option<String>,
@@ -1278,11 +1282,22 @@ impl ConnectionDetails {
     fn new(connection_id: ConnectionId, conn: &ConnectionInner) -> Self {
         Self {
             connection_id,
+            source: conn.source.clone(),
             connected: conn.connected,
             client: conn.init_request.client.clone(),
             weird_protocol_version: conn.weird_protocol_version,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[non_exhaustive]
+pub enum ConnectionSource {
+    Websocket {},
+    UnixSocket {},
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

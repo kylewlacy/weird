@@ -128,7 +128,10 @@ pub async fn init_world(children: impl IntoIterator<Item = Node>) -> (World, Con
 
     let world = World::default();
     let (conn, _init_response) = world
-        .create_connection(InitRequest::default())
+        .create_connection(
+            InitRequest::default(),
+            weird_core::world::ConnectionSource::Other,
+        )
         .await
         .unwrap();
 

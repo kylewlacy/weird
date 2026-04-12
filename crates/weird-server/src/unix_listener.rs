@@ -21,8 +21,13 @@ async fn handle_unix_conn(mut conn: tokio::net::UnixStream, state: AppState) -> 
     let (client_out_tx, mut client_out_rx) = tokio::sync::mpsc::channel(1);
 
     tokio::spawn(
-        handle_conn(state, client_in_rx, client_out_tx)
-            .instrument(tracing::info_span!("handle_unix_conn", conn.kind = "unix")),
+        handle_conn(
+            state,
+            weird_core::world::ConnectionSource::UnixSocket {},
+            client_in_rx,
+            client_out_tx,
+        )
+        .instrument(tracing::info_span!("handle_unix_conn", conn.kind = "unix")),
     );
 
     let stream_rx = tokio::io::BufReader::new(stream_rx);

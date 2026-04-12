@@ -28,8 +28,13 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
     let (client_out_tx, mut client_out_rx) = tokio::sync::mpsc::channel(1);
 
     tokio::spawn(
-        handle_conn(state, client_in_rx, client_out_tx)
-            .instrument(tracing::info_span!("ws_handler", conn.kind = "websocket")),
+        handle_conn(
+            state,
+            weird_core::world::ConnectionSource::Websocket {},
+            client_in_rx,
+            client_out_tx,
+        )
+        .instrument(tracing::info_span!("ws_handler", conn.kind = "websocket")),
     );
 
     loop {

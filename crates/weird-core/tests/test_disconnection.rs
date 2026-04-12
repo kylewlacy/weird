@@ -7,7 +7,10 @@ async fn test_disconnect_marks_windows_as_stale() {
     let (world, _conn_1, _window_1) = init_world([]).await;
 
     let (conn_2, _) = world
-        .create_connection(InitRequest::default())
+        .create_connection(
+            InitRequest::default(),
+            weird_core::world::ConnectionSource::Other,
+        )
         .await
         .unwrap();
     let window_2_a = world
