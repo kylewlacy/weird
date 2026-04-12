@@ -1,4 +1,7 @@
-use crate::world::{Event, InitRequest, InitResponse, Node, TriggerEvent, WorldDidChangeResponse};
+use crate::world::{
+    ConnectionDetails, ConnectionEvent, Event, InitRequest, InitResponse, Node, TriggerEvent,
+    WorldDidChangeResponse,
+};
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct JsonRpcRequest<Body> {
@@ -143,6 +146,9 @@ pub enum Request {
     SyncWorld {},
 
     #[serde(rename_all = "camelCase")]
+    SyncConnections {},
+
+    #[serde(rename_all = "camelCase")]
     NextEvent {},
 
     TriggerEvent(TriggerEvent),
@@ -156,6 +162,8 @@ pub enum Response {
     Empty,
     Init(InitResponse),
     WorldDidChange(WorldDidChangeResponse),
+    Connections { connections: Vec<ConnectionDetails> },
+    SyncConnectionEvent(ConnectionEvent),
     Event(Event),
 }
 
@@ -165,6 +173,8 @@ impl Response {
             Self::Init(_) => "init",
             Self::Empty => "empty",
             Self::WorldDidChange(_) => "worldDidChange",
+            Self::Connections { .. } => "connections",
+            Self::SyncConnectionEvent(_) => "syncConnectionEvent",
             Self::Event(_) => "event",
         }
     }

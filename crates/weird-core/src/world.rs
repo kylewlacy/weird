@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 pub struct World {
     state: Arc<RwLock<WorldState>>,
     world_did_change_events: tokio::sync::broadcast::Sender<WorldDidChangeResponse>,
+    connection_events: tokio::sync::broadcast::Sender<ConnectionEvent>,
     next_connection_id: Arc<AtomicU64>,
 }
 
@@ -17,21 +18,6 @@ impl World {
         &self,
         init_request: InitRequest,
     ) -> Result<(Connection, InitResponse), CreateConnectionError> {
-        let id = self
-            .next_connection_id
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let id = ConnectionId(id);
-        let mut state = self.state.write().await;
-        let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
-        let inner = ConnectionInner { event_tx };
-        let conn = Connection {
-            id,
-            event_rx,
-            state: Arc::downgrade(&self.state),
-            world_did_change_events: self.world_did_change_events.clone(),
-        };
-        state.connections.insert(id, inner);
-
         let weird_protocol_version = WeirdProtocolVersion::CURRENT;
         if init_request.weird_protocol_version != weird_protocol_version {
             return Err(CreateConnectionError::ProtocolVersionMismatch {
@@ -39,6 +25,35 @@ impl World {
                 current: weird_protocol_version,
             });
         }
+
+        let id = self
+            .next_connection_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id = ConnectionId(id);
+        let mut state = self.state.write().await;
+        let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+        let inner = ConnectionInner {
+            connected: true,
+            init_request,
+            weird_protocol_version,
+            event_tx,
+        };
+        let conn_entry = state.connections.entry(id).insert_entry(inner);
+        let inner = conn_entry.get();
+
+        let _ = self
+            .connection_events
+            .send(ConnectionEvent::Connected(ConnectionDetails::new(
+                id, inner,
+            )));
+
+        let conn = Connection {
+            id,
+            event_rx,
+            state: Arc::downgrade(&self.state),
+            world_did_change_events: self.world_did_change_events.clone(),
+            connection_events: self.connection_events.clone(),
+        };
 
         let response = InitResponse {
             weird_protocol_version,
@@ -252,6 +267,26 @@ impl World {
         (initial_event, events_rx)
     }
 
+    /// Subscribe to future `ConnectionEvent` events, and additionally
+    /// get all current connections.
+    pub async fn subscribe_to_connection_events(
+        &self,
+    ) -> (
+        Vec<ConnectionDetails>,
+        tokio::sync::broadcast::Receiver<ConnectionEvent>,
+    ) {
+        let state = self.state.read().await;
+        let connections = state
+            .connections
+            .iter()
+            .map(|(id, conn)| ConnectionDetails::new(*id, conn))
+            .collect();
+
+        let events_rx = self.connection_events.subscribe();
+
+        (connections, events_rx)
+    }
+
     pub async fn trigger_event(&self, event: TriggerEvent) -> Result<(), TriggerEventFailed> {
         let mut state = self.state.write().await;
         let mut change_event = WorldDidChangeResponse::default();
@@ -326,6 +361,7 @@ impl Default for World {
         Self {
             state: Arc::new(RwLock::new(WorldState::default())),
             world_did_change_events: tokio::sync::broadcast::Sender::new(10),
+            connection_events: tokio::sync::broadcast::Sender::new(10),
             next_connection_id: Arc::new(AtomicU64::new(1)),
         }
     }
@@ -365,6 +401,15 @@ impl WorldState {
                 conn_node_ids.remove(&node_id);
                 if conn_node_ids.is_empty() {
                     conn_node_entry.remove();
+
+                    // Remove the connection entry if the connection is
+                    // disconnected and there are no more nodes
+                    if let std::collections::btree_map::Entry::Occupied(conn_entry) =
+                        self.connections.entry(conn_id)
+                        && !conn_entry.get().connected
+                    {
+                        conn_entry.remove();
+                    }
                 }
             }
 
@@ -464,13 +509,18 @@ impl WorldState {
         connection_id: ConnectionId,
         event: &mut WorldDidChangeResponse,
     ) {
+        // Mark the connection as disconnected
+        if let Some(conn) = self.connections.get_mut(&connection_id) {
+            conn.connected = false;
+        }
+
         // Mark any window nodes owned by the connection as stale
         let node_ids = self
             .nodes_by_connection
             .get(&connection_id)
             .into_iter()
             .flatten();
-        for node_id in node_ids {
+        for node_id in node_ids.clone() {
             let node = self.nodes.get_mut(node_id).unwrap();
             if let FlatNode::Element(el) = &**node
                 && el.tag == "Window"
@@ -493,6 +543,13 @@ impl WorldState {
                     }),
                 }));
             }
+        }
+
+        // Remove the connection entry if there are no nodes left
+        let mut node_ids = node_ids;
+        if node_ids.next().is_none() {
+            self.connections.remove(&connection_id);
+            self.nodes_by_connection.remove(&connection_id);
         }
     }
 
@@ -667,6 +724,9 @@ fn node_update(current: &FlatNode, updated: &FlatNode) -> Option<NodeUpdate> {
 }
 
 struct ConnectionInner {
+    connected: bool,
+    init_request: InitRequest,
+    weird_protocol_version: WeirdProtocolVersion,
     event_tx: tokio::sync::mpsc::UnboundedSender<Event>,
 }
 
@@ -675,6 +735,7 @@ pub struct Connection {
     event_rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
     state: Weak<RwLock<WorldState>>,
     world_did_change_events: tokio::sync::broadcast::Sender<WorldDidChangeResponse>,
+    connection_events: tokio::sync::broadcast::Sender<ConnectionEvent>,
 }
 
 impl Connection {
@@ -691,6 +752,12 @@ impl Drop for Connection {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
+                let _ =
+                    self.connection_events
+                        .send(ConnectionEvent::Disconnected(DisconnectedEvent {
+                            connection_id: self.id,
+                        }));
+
                 let mut state = state.write().await;
                 let mut event = WorldDidChangeResponse::default();
                 state.connection_did_close(self.id, &mut event);
@@ -702,7 +769,7 @@ impl Drop for Connection {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum WeirdProtocolVersion {
     #[serde(rename = "0.1.0")]
     V0_1_0,
@@ -1189,6 +1256,39 @@ impl ElementNodeUpdate {
         self.clear_attributes.insert(name.into());
         self
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ConnectionEvent {
+    Connected(ConnectionDetails),
+    Disconnected(DisconnectedEvent),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionDetails {
+    connection_id: ConnectionId,
+    connected: bool,
+    weird_protocol_version: WeirdProtocolVersion,
+    client: Option<String>,
+}
+
+impl ConnectionDetails {
+    fn new(connection_id: ConnectionId, conn: &ConnectionInner) -> Self {
+        Self {
+            connection_id,
+            connected: conn.connected,
+            client: conn.init_request.client.clone(),
+            weird_protocol_version: conn.weird_protocol_version,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisconnectedEvent {
+    connection_id: ConnectionId,
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -115,7 +115,40 @@ export const WorldDidChangeResponse = z.object({
 });
 export type WorldDidChangeResponse = z.infer<typeof WorldDidChangeResponse>;
 
-export const EventType = z.union([z.literal("syncWorld")]);
+export const ConnectionDetails = z.object({
+  connectionId: ConnectionId,
+  connected: z.boolean(),
+  weirdProtocolVersion: WeirdProtocolVersion,
+  client: z.string().nullish(),
+});
+export type ConnectionDetails = z.infer<typeof ConnectionDetails>;
+
+export const ConnectedEvent = ConnectionDetails.extend({
+  type: z.literal("connected"),
+});
+export type ConnectedEvent = z.infer<typeof ConnectedEvent>;
+
+export const DisconnectedEvent = z.object({
+  type: z.literal("disconnected"),
+  connectionId: ConnectionId,
+});
+export type DisconnectedEvent = z.infer<typeof DisconnectedEvent>;
+
+export const ConnectionEvent = z.discriminatedUnion("type", [
+  ConnectedEvent,
+  DisconnectedEvent,
+]);
+export type ConnectionEvent = z.infer<typeof ConnectionEvent>;
+
+export const SyncConnectionsResponse = z
+  .object({ connections: ConnectionDetails.array() })
+  .or(ConnectionEvent);
+export type SyncConnectionsResponse = z.infer<typeof SyncConnectionsResponse>;
+
+export const EventType = z.union([
+  z.literal("syncWorld"),
+  z.literal("syncConnections"),
+]);
 export type EventType = z.infer<typeof EventType>;
 
 export const Events = {

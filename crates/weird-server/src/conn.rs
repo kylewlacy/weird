@@ -148,6 +148,55 @@ pub async fn handle_conn(
                             .instrument(tracing::info_span!("sync_world")),
                         );
                     }
+                    Request::SyncConnections {} => {
+                        let (connections, mut events_rx) =
+                            state.world.subscribe_to_connection_events().await;
+
+                        let response = JsonRpcResponse::result(
+                            request.id.clone(),
+                            Response::Connections { connections },
+                        );
+
+                        let out_result = client_out.send(response).await;
+                        match out_result {
+                            Ok(()) => {}
+                            Err(error) => {
+                                tracing::warn!("failed to send response: {error}");
+                            }
+                        }
+
+                        let client_out = client_out.clone();
+                        tokio::spawn(
+                            async move {
+                                loop {
+                                    let event = events_rx.recv().await;
+                                    let event = match event {
+                                        Ok(event) => event,
+                                        Err(error) => {
+                                            tracing::info!(
+                                                "exiting because SyncConnections subscription failed to receive: {error}"
+                                            );
+                                            break;
+                                        }
+                                    };
+                                    let response = JsonRpcResponse::result(
+                                        request.id.clone(),
+                                        Response::SyncConnectionEvent(event),
+                                    );
+
+                                    let out_result = client_out.send(response).await;
+                                    match out_result {
+                                        Ok(()) => {}
+                                        Err(error) => {
+                                            tracing::info!("exiting because SyncConnections subscription failed to send: {error}");
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            .instrument(tracing::info_span!("sync_world")),
+                        );
+                    }
                     Request::TriggerEvent(trigger_event) => {
                         let result = state.world.trigger_event(trigger_event).await.map_or_else(
                             |error| {
