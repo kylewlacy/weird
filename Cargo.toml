@@ -6,6 +6,7 @@ members = [
     "crates/weird-client",
     "crates/weird-core",
     "crates/weird-server",
+    "crates/weird-test-support",
 ]
 
 [workspace.dependencies]

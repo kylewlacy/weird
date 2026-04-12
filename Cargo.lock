@@ -962,6 +962,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "weird-test-support",
 ]
 
 [[package]]
@@ -974,6 +975,15 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "weird-core",
+]
+
+[[package]]
+name = "weird-test-support"
+version = "0.1.0"
+dependencies = [
  "tracing",
  "tracing-subscriber",
  "weird-core",

@@ -12,3 +12,4 @@ serde_json = { workspace = true }
 [dev-dependencies]
 pretty_assertions = "1.4.1"
 tracing-subscriber = { workspace = true }
+weird-test-support = { path = "../weird-test-support" }
