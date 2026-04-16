@@ -6,8 +6,11 @@ use weird_core::{
     world::{ConnectionSource, ROOT_NODE_ID, World},
 };
 
+use crate::config::Config;
+
 #[derive(Clone)]
 pub struct AppState {
+    pub config: Config,
     pub world: World,
 }
 

@@ -1,5 +1,6 @@
 use axum::{
     extract::{State, WebSocketUpgrade, ws},
+    http::StatusCode,
     response::IntoResponse,
 };
 use futures_util::{SinkExt as _, StreamExt as _};
@@ -12,6 +13,10 @@ use crate::conn::{AppState, handle_conn};
 pub fn router(state: AppState) -> axum::Router {
     axum::Router::new()
         .route("/ws", axum::routing::any(ws_endpoint_handler))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            allowed_origin_middleware,
+        ))
         .with_state(state)
 }
 
@@ -135,5 +140,56 @@ async fn ws_handler(state: AppState, socket: ws::WebSocket) {
                 }
             }
         };
+    }
+}
+
+#[axum::debug_middleware]
+async fn allowed_origin_middleware(
+    state: State<AppState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let Some(origin) = request.headers().get("Origin") else {
+        return (
+            StatusCode::BAD_REQUEST,
+            axum::Json(JsonError::new("'Origin' header not set")),
+        )
+            .into_response();
+    };
+    let origin = match origin.to_str() {
+        Ok(origin) => origin,
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                axum::Json(JsonError::new(format!(
+                    "invalid value for 'Origin' header: {error}"
+                ))),
+            )
+                .into_response();
+        }
+    };
+
+    if !state.config.allow_origins.contains(origin) {
+        tracing::info!(request_origin = origin, allowed_origins = ?state.config.allow_origins, "received request with disallowed origin header");
+        return (
+            StatusCode::BAD_REQUEST,
+            axum::Json(JsonError::new(format!("origin not allowed: {origin}"))),
+        )
+            .into_response();
+    }
+
+    next.run(request).await
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct JsonError {
+    error: String,
+}
+
+impl JsonError {
+    fn new(error: impl Into<String>) -> Self {
+        Self {
+            error: error.into(),
+        }
     }
 }

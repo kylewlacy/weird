@@ -4,8 +4,9 @@ use anyhow::Context as _;
 use tokio::io::AsyncWriteExt as _;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
-use crate::conn::AppState;
+use crate::{config::Config, conn::AppState};
 
+mod config;
 mod conn;
 mod http_listener;
 mod unix_listener;
@@ -22,7 +23,11 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    let config: Config =
+        figment::Figment::from(figment::providers::Env::prefixed("WEIRD_SERVER_")).extract()?;
+
     let state = AppState {
+        config,
         world: weird_core::world::World::default(),
     };
 
