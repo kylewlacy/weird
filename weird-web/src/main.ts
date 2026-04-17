@@ -32,7 +32,7 @@ const app = h(
     ),
   },
   (worldEl = h("div", {
-    className: clsx("flex-1 size-full overflow-hidden, touch-none"),
+    className: clsx("flex-1 size-full overflow-hidden touch-none"),
   })),
   (debuggerEl = h("div", {
     id: "weird-debugger",

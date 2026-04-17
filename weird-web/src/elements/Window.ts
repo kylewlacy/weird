@@ -50,7 +50,7 @@ export const Window = defineElement(
         "div",
         {
           className: clsx(
-            "border-2 absolute shadow-md text-black bg-white border-black dark:text-white dark:border-zinc-300 dark:bg-zinc-800 dark:shadow-lg transition-window",
+            "flex flex-col border-2 absolute shadow-md text-black bg-white border-black dark:text-white dark:border-zinc-300 dark:bg-zinc-800 dark:shadow-lg max-w-full max-h-full transition-window",
           ),
           style: {
             zIndex: zIndex.toString(),
@@ -60,13 +60,13 @@ export const Window = defineElement(
           "div",
           {
             className: clsx(
-              "border-b-2 border-black touch-none select-none dark:border-zinc-300",
+              "flex-none border-b-2 border-black touch-none select-none dark:border-zinc-300",
             ),
           },
           h(
             "div",
             {
-              className: clsx("flex items-center"),
+              className: clsx("flex-1 flex items-center"),
             },
             h(
               "div",
@@ -82,11 +82,13 @@ export const Window = defineElement(
         )),
         h(
           "div",
-          { className: clsx("relative") },
+          { className: clsx("relative w-full h-full overflow-auto") },
           (this.#staleOverlay = h("div", {
             className: clsx("absolute inset-0 bg-black dark:bg-white"),
           })),
-          (this.domSlot = h("div", {})),
+          (this.domSlot = h("div", {
+            className: clsx("w-full h-full"),
+          })),
         ),
       );
 
