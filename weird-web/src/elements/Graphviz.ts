@@ -60,6 +60,7 @@ type GraphvizGraph = z.output<typeof GraphvizGraph>;
 const GraphvizAttributes = z.object({
   graph: z.string().or(GraphvizGraph).optional(),
   engine: z.string().optional(),
+  resize: z.boolean().optional(),
 });
 type GraphvizAttributes = z.output<typeof GraphvizAttributes>;
 
@@ -105,6 +106,15 @@ export const Graphviz = defineElement(
 
           if (this.#attrs.graph != null) {
             const svg = viz.renderSVGElement(this.#attrs.graph, renderOptions);
+
+            // Remove fixed SVG width/height when `resize` attribute is set,
+            // so the element can resize to fit within its container
+            const resize = this.#attrs.resize ?? false;
+            if (resize) {
+              svg.removeAttribute("width");
+              svg.removeAttribute("height");
+            }
+
             const defaultStroke = svg.querySelectorAll("[stroke=black]");
             for (const el of defaultStroke) {
               el.setAttribute("stroke", "var(--default-stroke)");
