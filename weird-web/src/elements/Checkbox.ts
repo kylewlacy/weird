@@ -10,18 +10,23 @@ type CheckboxAttributes = z.output<typeof CheckboxAttributes>;
 export const Checkbox = defineElement(
   CheckboxAttributes,
   class {
-    dom: HTMLInputElement;
+    dom: HTMLDivElement;
     domSlot = null;
 
+    #input: HTMLInputElement;
     #value: boolean;
 
     constructor(attrs: CheckboxAttributes, ctx: WeirdElementContext) {
-      this.dom = h("input", {
-        type: "checkbox",
-        className: clsx(
-          "px-1 bg-white border-2 border-black shadow-sm focus-visible:shadow-sm/50 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:shadow-md",
-        ),
-      });
+      this.dom = h(
+        "div",
+        {},
+        (this.#input = h("input", {
+          type: "checkbox",
+          className: clsx(
+            "px-1 bg-white border-2 border-black shadow-sm focus-visible:shadow-sm/50 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:shadow-md",
+          ),
+        })),
+      );
       this.dom.addEventListener("input", () => {
         this.#inputDidChange(ctx);
       });
@@ -31,13 +36,13 @@ export const Checkbox = defineElement(
     }
 
     #inputDidChange(ctx: WeirdElementContext) {
-      ctx.triggerEvent("change", { value: this.dom.checked });
-      this.dom.checked = this.#value;
+      ctx.triggerEvent("change", { value: this.#input.checked });
+      this.#input.checked = this.#value;
     }
 
     updateAttributes(attrs: CheckboxAttributes) {
       const value = attrs.value ?? false;
-      this.dom.checked = value;
+      this.#input.checked = value;
       this.#value = value;
     }
   },
