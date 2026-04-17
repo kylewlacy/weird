@@ -61,7 +61,7 @@ type GraphvizGraph = z.output<typeof GraphvizGraph>;
 const GraphvizAttributes = z.object({
   graph: z.string().or(GraphvizGraph).optional(),
   engine: z.string().optional(),
-  resize: z.boolean().optional(),
+  autoSize: z.boolean().optional(),
   pan: z.boolean().optional(),
   zoom: z.boolean().optional(),
 });
@@ -157,10 +157,10 @@ export const Graphviz = defineElement(
           if (this.#attrs.graph != null) {
             const svg = viz.renderSVGElement(this.#attrs.graph, renderOptions);
 
-            // Remove fixed SVG width/height when `resize` attribute is set,
+            // Remove fixed SVG width/height when `autoSize` attribute is set,
             // so the element can resize to fit within its container
-            const resize = this.#attrs.resize ?? false;
-            if (resize) {
+            const autoSize = this.#attrs.autoSize ?? false;
+            if (autoSize) {
               svg.removeAttribute("width");
               svg.removeAttribute("height");
             }
