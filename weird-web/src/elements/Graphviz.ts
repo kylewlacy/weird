@@ -7,6 +7,7 @@ import {
 } from "./utils.ts";
 import clsx from "clsx";
 import * as Viz from "@viz-js/viz";
+import Panzoom, { type PanzoomObject } from "@panzoom/panzoom";
 
 const GraphvizGraphAttributes = z.record(
   z.string(),
@@ -61,6 +62,8 @@ const GraphvizAttributes = z.object({
   graph: z.string().or(GraphvizGraph).optional(),
   engine: z.string().optional(),
   resize: z.boolean().optional(),
+  pan: z.boolean().optional(),
+  zoom: z.boolean().optional(),
 });
 type GraphvizAttributes = z.output<typeof GraphvizAttributes>;
 
@@ -69,21 +72,68 @@ export const Graphviz = defineElement(
   class {
     dom: HTMLDivElement;
     domSlot = null;
+    #container: HTMLDivElement;
     #attrs: GraphvizAttributes = {};
+    #renderedGraph: unknown;
+    #renderedEngine: string | undefined;
+    #inserted = false;
+    #panzoom: PanzoomObject | undefined;
 
     constructor(attrs: GraphvizAttributes) {
-      this.dom = h("div", {
-        className: clsx("flex flex-row justify-around weird-graphviz"),
+      this.dom = h(
+        "div",
+        { className: clsx("overflow-hidden") },
+        (this.#container = h("div", {
+          className: clsx(
+            "flex flex-row justify-around weird-graphviz max-w-full max-h-full",
+          ),
+        })),
+      );
+      this.dom.addEventListener("wheel", (event) => {
+        if (event.shiftKey && this.#panzoom != null && this.#attrs.zoom) {
+          this.#panzoom.zoomWithWheel(event);
+        }
       });
 
       this.updateAttributes(attrs);
     }
 
     updateAttributes(attrs: GraphvizAttributes) {
+      if (this.#inserted) {
+        const pan = this.#attrs.pan ?? false;
+        const zoom = this.#attrs.zoom ?? false;
+        if (pan || zoom) {
+          if (this.#panzoom == null) {
+            this.#panzoom = Panzoom(this.#container, {
+              disablePan: !pan,
+              disableZoom: !zoom,
+            });
+          } else {
+            this.#panzoom.setOptions({
+              disablePan: !pan,
+              disableZoom: !zoom,
+            });
+          }
+        } else if (this.#panzoom != null) {
+          this.#panzoom.reset();
+          this.#panzoom.setOptions({
+            disablePan: true,
+            disableZoom: true,
+          });
+        }
+      }
+
       this.#attrs = attrs;
 
       Viz.instance()
         .then((viz) => {
+          const needsRerender =
+            this.#attrs.engine !== this.#renderedGraph ||
+            this.#attrs.graph !== this.#renderedEngine;
+          if (!needsRerender) {
+            return;
+          }
+
           const renderOptions: Viz.RenderOptions = {
             graphAttributes: {
               bgcolor: "transparent",
@@ -123,12 +173,19 @@ export const Graphviz = defineElement(
             for (const el of defaultFill) {
               el.setAttribute("fill", "var(--default-fill)");
             }
-            this.dom.replaceChildren(svg);
+            this.#container.replaceChildren(svg);
+          }
+
+          this.#renderedGraph = this.#attrs.graph;
+          this.#renderedEngine = this.#attrs.engine;
+
+          if (this.#panzoom != null) {
+            this.#panzoom.reset();
           }
         })
         .catch((error) => {
           console.warn("Failed to render GraphViz graph", { error });
-          this.dom.replaceChildren(
+          this.#container.replaceChildren(
             h(
               "div",
               { className: clsx("bg-red-300 border-2 border-red-600 p-2") },
@@ -137,6 +194,11 @@ export const Graphviz = defineElement(
             ),
           );
         });
+    }
+
+    didInsert() {
+      this.#inserted = true;
+      this.updateAttributes(this.#attrs);
     }
   },
 );
