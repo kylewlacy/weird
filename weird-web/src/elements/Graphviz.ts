@@ -105,6 +105,7 @@ export const Graphviz = defineElement(
         if (pan || zoom) {
           if (this.#panzoom == null) {
             this.#panzoom = Panzoom(this.#container, {
+              canvas: true,
               disablePan: !pan,
               disableZoom: !zoom,
             });
