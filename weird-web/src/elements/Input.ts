@@ -19,6 +19,7 @@ export const Input = defineElement(
 
     constructor(attrs: InputAttributes, ctx: WeirdElementContext) {
       this.dom = h("input", {
+        type: "text",
         className: clsx(
           "px-1 bg-white border-2 border-black shadow-sm focus-visible:shadow-sm/50 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:shadow-md",
         ),
