@@ -82,6 +82,16 @@ export class World {
           );
           parentNode.children.add(change.id);
           this.nodes[change.id] = worldNode;
+
+          switch (worldNode.type) {
+            case "element":
+              worldNode.element.didInsert();
+              break;
+            case "text":
+              break;
+            default:
+              return unreachable(worldNode);
+          }
           break;
         }
         case "updated": {
