@@ -5,7 +5,7 @@ import {
   type WeirdElement,
   type WeirdElementClass,
 } from "./elements";
-import type { WeirdElementContext } from "./elements/utils.ts";
+import { h, type WeirdElementContext } from "./elements/utils.ts";
 
 export const ROOT_NODE_ID = NodeId.parse("0");
 
@@ -36,11 +36,14 @@ export class World {
         case "created": {
           let worldNode: WorldNode;
           if (typeof change.node === "string") {
+            const domText = document.createTextNode(change.node);
+            const dom = h("span", {}, domText);
             worldNode = {
               type: "text",
               parentId: change.parentId,
               text: change.node,
-              dom: document.createTextNode(change.node),
+              dom,
+              domText,
             };
           } else {
             worldNode = createElement({
@@ -255,7 +258,8 @@ export interface WorldText {
   type: "text";
   parentId: NodeId | null;
   text: string;
-  dom: Text;
+  dom: HTMLElement;
+  domText: Text;
 }
 
 interface CreateElementOptions {
