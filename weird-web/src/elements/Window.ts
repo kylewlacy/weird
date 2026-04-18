@@ -357,7 +357,7 @@ export const Window = defineElement(
       const stale = attrs.stale ?? false;
       this.#titleNode.textContent = attrs.title ?? DEFAULT_WINDOW_TITLE;
       this.domSlot.className = clsx(
-        "flex flex-col gap-1",
+        "flex flex-col gap-1 w-full h-full",
         unpadded ? "p-0" : "p-1",
       );
       this.#staleOverlay.classList.add(clsx("transition-opacity"));
