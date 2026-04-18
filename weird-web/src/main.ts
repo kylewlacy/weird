@@ -45,7 +45,7 @@ const app = h(
     "div",
     {
       className: clsx(
-        "flex-none overflow-hidden flex gap-x-2 px-2 py-2 relative z-0",
+        "flex-none overflow-hidden flex gap-x-2 px-2 py-2 relative z-0 bg-white border-t-2 border-black dark:bg-zinc-900 dark:border-zinc-300",
       ),
     },
     h("label", { htmlFor: "weird-theme", className: clsx("sr-only") }, "Theme"),
