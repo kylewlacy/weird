@@ -343,16 +343,19 @@ export const Window = defineElement(
       this.#isMaximized = maximize;
       this.#maximizeButtonTextNode.textContent = maximize ? "v" : "^";
       if (maximize) {
-        this.dom.style.width = "100%";
-        this.dom.style.height = "100%";
+        const windowRect = this.dom.getBoundingClientRect();
+        this.dom.style.width = `${windowRect.width}px`;
+        this.dom.style.height = `${windowRect.height}px`;
         this.dom.style.transform = `translateX(0px) translateY(0px)`;
+        setTimeout(() => {
+          this.dom.style.width = "100%";
+          this.dom.style.height = "100%";
+        });
       } else {
-        this.dom.style.width = this.#minimizedWidth != null
-          ? `${this.#minimizedWidth}px`
-          : "";
-        this.dom.style.height = this.#minimizedHeight != null
-          ? `${this.#minimizedHeight}px`
-          : "";
+        this.dom.style.width =
+          this.#minimizedWidth != null ? `${this.#minimizedWidth}px` : "";
+        this.dom.style.height =
+          this.#minimizedHeight != null ? `${this.#minimizedHeight}px` : "";
         this.moveWindowTo({
           left: this.#minimizedLeft,
           top: this.#minimizedTop,
