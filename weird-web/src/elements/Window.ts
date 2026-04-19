@@ -45,12 +45,19 @@ export const Window = defineElement(
     #isMaximized: boolean = false;
     #titleNode: Text;
     #staleOverlay: HTMLDivElement;
-    #left: number = 0;
-    #top: number = 0;
+    #minimizedLeft = 0;
+    #minimizedTop = 0;
+    #minimizedWidth: number | undefined;
+    #minimizedHeight: number | undefined;
     #resizeHandles: Record<ResizeDirection, HTMLDivElement>;
 
     #windowResizeListener = (): void => {
-      this.moveWindowTo({ left: this.#left, top: this.#top });
+      if (!this.#isMaximized) {
+        this.moveWindowTo({
+          left: this.#minimizedLeft,
+          top: this.#minimizedTop,
+        });
+      }
     };
 
     constructor(attrs: WindowAttributes, ctx: WeirdElementContext) {
@@ -165,20 +172,21 @@ export const Window = defineElement(
             const windowRect = this.dom.getBoundingClientRect();
             let windowX: number | undefined;
             let windowY: number | undefined;
-            let windowWidth = windowRect.width;
-            let windowHeight = windowRect.height;
+
+            this.#minimizedWidth = windowRect.width;
+            this.#minimizedHeight = windowRect.height;
 
             switch (pointerCaptureState.direction) {
               case "N":
               case "NE":
               case "NW":
-                windowHeight = windowRect.bottom - event.clientY;
+                this.#minimizedHeight = windowRect.bottom - event.clientY;
                 windowY = event.clientY;
                 break;
               case "S":
               case "SE":
               case "SW":
-                windowHeight = event.clientY - windowRect.top;
+                this.#minimizedHeight = event.clientY - windowRect.top;
                 break;
               case "E":
               case "W":
@@ -188,12 +196,13 @@ export const Window = defineElement(
               case "E":
               case "NE":
               case "SE":
-                windowWidth = event.clientX - windowRect.left;
+                this.#minimizedWidth = event.clientX - windowRect.left;
                 break;
               case "W":
               case "NW":
               case "SW":
-                windowWidth = windowRect.right - Math.round(event.clientX);
+                this.#minimizedWidth =
+                  windowRect.right - Math.round(event.clientX);
                 windowX = Math.round(event.clientX);
                 break;
               case "N":
@@ -201,12 +210,12 @@ export const Window = defineElement(
                 break;
             }
 
-            this.dom.style.width = `${windowWidth}px`;
-            this.dom.style.height = `${windowHeight}px`;
+            this.dom.style.width = `${this.#minimizedWidth}px`;
+            this.dom.style.height = `${this.#minimizedHeight}px`;
             if (windowX != null || windowY != null) {
               this.moveWindowTo({
-                left: windowX ?? this.#left,
-                top: windowY ?? this.#top,
+                left: windowX ?? this.#minimizedLeft,
+                top: windowY ?? this.#minimizedTop,
               });
             }
             break;
@@ -324,8 +333,8 @@ export const Window = defineElement(
       const left = Math.min(leftMax, Math.max(leftMin, pos.left));
       const top = Math.min(topMax, Math.max(topMin, pos.top));
 
-      this.#left = left;
-      this.#top = top;
+      this.#minimizedLeft = left;
+      this.#minimizedTop = top;
 
       this.dom.style.transform = `translateX(${left}px) translateY(${top}px)`;
     }
@@ -338,9 +347,16 @@ export const Window = defineElement(
         this.dom.style.height = "100%";
         this.dom.style.transform = `translateX(0px) translateY(0px)`;
       } else {
-        this.dom.style.width = "auto";
-        this.dom.style.height = "auto";
-        this.moveWindowTo({ left: this.#left, top: this.#top });
+        this.dom.style.width = this.#minimizedWidth != null
+          ? `${this.#minimizedWidth}px`
+          : "";
+        this.dom.style.height = this.#minimizedHeight != null
+          ? `${this.#minimizedHeight}px`
+          : "";
+        this.moveWindowTo({
+          left: this.#minimizedLeft,
+          top: this.#minimizedTop,
+        });
       }
     }
 
