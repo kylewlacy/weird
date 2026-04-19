@@ -81,8 +81,7 @@
   --default-stroke: currentColor;
   --default-fill: currentColor;
 
-  text {
-    font-family: inherit;
+  text:not([fill]) {
     fill: currentColor;
   }
 }

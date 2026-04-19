@@ -174,6 +174,12 @@ export const Graphviz = defineElement(
             for (const el of defaultFill) {
               el.setAttribute("fill", "var(--default-fill)");
             }
+            const defaultFont = svg.querySelectorAll(
+              '[font-family="Times,serif"]',
+            );
+            for (const el of defaultFont) {
+              el.removeAttribute("font-family");
+            }
             this.#container.replaceChildren(svg);
           }
 
