@@ -144,7 +144,7 @@ export const Window = defineElement(
 
       const onPointerMove = (event: PointerEvent) => {
         if (event.button > 0) {
-          windowTitlebar.releasePointerCapture(event.pointerId);
+          pointerCaptureState?.captured.releasePointerCapture(event.pointerId);
           return;
         }
 
@@ -165,8 +165,8 @@ export const Window = defineElement(
             const windowRect = this.dom.getBoundingClientRect();
             let windowX: number | undefined;
             let windowY: number | undefined;
-            let windowWidth: number | undefined;
-            let windowHeight: number | undefined;
+            let windowWidth = windowRect.width;
+            let windowHeight = windowRect.height;
 
             switch (pointerCaptureState.direction) {
               case "N":
@@ -201,12 +201,8 @@ export const Window = defineElement(
                 break;
             }
 
-            if (windowWidth != null) {
-              this.dom.style.width = `${windowWidth}px`;
-            }
-            if (windowHeight != null) {
-              this.dom.style.height = `${windowHeight}px`;
-            }
+            this.dom.style.width = `${windowWidth}px`;
+            this.dom.style.height = `${windowHeight}px`;
             if (windowX != null || windowY != null) {
               this.moveWindowTo({
                 left: windowX ?? this.#left,
