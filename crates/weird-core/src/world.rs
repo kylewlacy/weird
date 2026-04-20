@@ -788,6 +788,24 @@ pub struct InitRequest {
     pub weird_protocol_version: WeirdProtocolVersion,
     pub client: Option<String>,
     pub app: Option<String>,
+    #[serde(default)]
+    pub window_attributes: HashMap<String, serde_json::Value>,
+}
+
+impl InitRequest {
+    pub fn window_attrs(
+        mut self,
+        attrs: impl IntoIterator<Item = (String, serde_json::Value)>,
+    ) -> Self {
+        self.window_attributes.extend(attrs);
+        self
+    }
+
+    pub fn window_attr(mut self, name: impl Into<String>, value: impl serde::Serialize) -> Self {
+        let value = serde_json::to_value(value).unwrap();
+        self.window_attributes.insert(name.into(), value);
+        self
+    }
 }
 
 impl Default for InitRequest {
@@ -796,6 +814,7 @@ impl Default for InitRequest {
             weird_protocol_version: WeirdProtocolVersion::CURRENT,
             client: None,
             app: None,
+            window_attributes: HashMap::new(),
         }
     }
 }

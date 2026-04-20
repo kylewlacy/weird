@@ -6,6 +6,7 @@ edition = "2024"
 
 [dependencies]
 crossbeam-channel = "0.5.15"
+serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 weird-core = { path = "../weird-core" }

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io::{BufRead as _, Write as _},
     os::unix::net::UnixStream,
     path::{Path, PathBuf},
@@ -65,7 +66,10 @@ impl WeirdClient {
     }
 
     pub fn builder() -> WeirdClientBuilder {
-        WeirdClientBuilder { app: None }
+        WeirdClientBuilder {
+            app: None,
+            window_attributes: HashMap::new(),
+        }
     }
 
     fn request(
@@ -132,11 +136,26 @@ impl WeirdClient {
 
 pub struct WeirdClientBuilder {
     app: Option<String>,
+    window_attributes: HashMap<String, serde_json::Value>,
 }
 
 impl WeirdClientBuilder {
     pub fn app(mut self, app: &str) -> Self {
         self.app = Some(app.to_string());
+        self
+    }
+
+    pub fn window_attrs(
+        mut self,
+        attrs: impl IntoIterator<Item = (String, serde_json::Value)>,
+    ) -> Self {
+        self.window_attributes.extend(attrs);
+        self
+    }
+
+    pub fn window_attr(mut self, name: impl Into<String>, value: impl serde::Serialize) -> Self {
+        let value = serde_json::to_value(value).unwrap();
+        self.window_attributes.insert(name.into(), value);
         self
     }
 
@@ -199,6 +218,7 @@ impl WeirdClientBuilder {
         let init_request = InitRequest {
             client: Some("weird-client".to_string()),
             app: self.app,
+            window_attributes: self.window_attributes,
             ..Default::default()
         };
         let client = WeirdClient::init(request_tx, response_rx, init_request)?;

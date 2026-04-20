@@ -43,7 +43,13 @@ pub async fn handle_conn(
         return;
     };
 
-    let app_name = init_request_body.app.clone();
+    let mut default_window_attrs = init_request_body.window_attributes.clone();
+    if let Some(app) = &init_request_body.app {
+        default_window_attrs
+            .entry("title".to_string())
+            .or_insert_with(|| serde_json::Value::String(app.clone()));
+    }
+
     let conn_result = state
         .world
         .create_connection(init_request_body, source)
@@ -250,7 +256,7 @@ pub async fn handle_conn(
                                     .world
                                     .append_node(
                                         weird_core::world::Element::new("Window")
-                                            .attr_optional("title", app_name.as_ref())
+                                            .attrs(default_window_attrs.clone())
                                             .children(render)
                                             .into(),
                                         ROOT_NODE_ID,
