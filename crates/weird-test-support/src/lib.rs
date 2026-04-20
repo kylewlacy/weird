@@ -30,6 +30,23 @@ pub async fn render(
     result
 }
 
+pub async fn append_node(
+    world: &mut World,
+    conn_id: ConnectionId,
+    parent_id: NodeId,
+    node: Node,
+) -> (WorldDidChangeResponse, NodeId) {
+    world.assert_internally_consistent().await;
+
+    let (_, mut rx) = world.subscribe_to_world_did_change_events().await;
+    let node_id = world.append_node(node, parent_id, conn_id).await;
+    let result = rx.recv().await.unwrap();
+
+    world.assert_internally_consistent().await;
+
+    (result, node_id)
+}
+
 pub async fn node_id(world: &mut World, id: &str) -> NodeId {
     let node_id = world
         .get_nodes()

@@ -28,6 +28,7 @@ const WindowAttributes = z.object({
   stale: z.boolean().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
+  replace: z.boolean().optional(),
 });
 type WindowAttributes = z.output<typeof WindowAttributes>;
 

@@ -471,6 +471,51 @@ impl WorldState {
                 node_id
             });
 
+            // Handle window replacement. For `Window` elements, if the
+            // `replace` attr is set, delete any stale windows (which also
+            // have `replace` set and where the client name matches)
+            if let Some(connection) = self.connections.get(&connection_id)
+                && let Some(app) = &connection.init_request.app
+                && parent_id == ROOT_NODE_ID
+                && let Node::Element(el) = &node
+                && el.element.tag == "Window"
+                && el.element.attributes.get("replace") == Some(&serde_json::Value::Bool(true))
+            {
+                let prior_conns = self.connections.iter().filter_map(|(conn_id, conn)| {
+                    if !conn.connected && conn.init_request.app.as_ref() == Some(app) {
+                        Some(*conn_id)
+                    } else {
+                        None
+                    }
+                });
+                let prior_windows = prior_conns
+                    .flat_map(|conn_id| {
+                        self.nodes_by_connection.get(&conn_id).into_iter().flatten()
+                    })
+                    .filter(|node_id| {
+                        let Some(node) = self.nodes.get(node_id) else {
+                            tracing::info!("no node");
+                            return false;
+                        };
+                        let Some((parent_id, _)) = self.parents.get(*node_id) else {
+                            tracing::info!("no parent");
+                            return false;
+                        };
+
+                        if *parent_id == ROOT_NODE_ID
+                            && let FlatNode::Element(el) = &**node
+                            && el.tag == "Window"
+                            && el.attributes.get("replace") == Some(&serde_json::Value::Bool(true))
+                            && el.attributes.get("stale") == Some(&serde_json::Value::Bool(true))
+                        {
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                self.remove_nodes_inner(prior_windows.copied().collect(), event);
+            }
+
             let (node, children) = node.into_flat_and_children();
             let node = Arc::new(node);
             self.nodes.insert(node_id, node.clone());
