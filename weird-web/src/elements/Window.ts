@@ -26,6 +26,8 @@ const WindowAttributes = z.object({
   title: z.string().optional(),
   unpadded: z.boolean().optional(),
   stale: z.boolean().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
 });
 type WindowAttributes = z.output<typeof WindowAttributes>;
 
@@ -47,6 +49,8 @@ export const Window = defineElement(
     #staleOverlay: HTMLDivElement;
     #minimizedLeft = 0;
     #minimizedTop = 0;
+    #defaultWidth: number | undefined;
+    #defaultHeight: number | undefined;
     #minimizedWidth: number | undefined;
     #minimizedHeight: number | undefined;
     #resizeHandles: Record<ResizeDirection, HTMLDivElement>;
@@ -74,6 +78,8 @@ export const Window = defineElement(
           ),
           style: {
             zIndex: zIndex.toString(),
+            width: attrs.width != null ? `${attrs.width}px` : "",
+            height: attrs.height != null ? `${attrs.height}px` : "",
           },
         },
         (windowTitlebar = h(
@@ -353,9 +359,17 @@ export const Window = defineElement(
         });
       } else {
         this.dom.style.width =
-          this.#minimizedWidth != null ? `${this.#minimizedWidth}px` : "";
+          this.#minimizedWidth != null
+            ? `${this.#minimizedWidth}px`
+            : this.#defaultWidth != null
+              ? `${this.#defaultWidth}px`
+              : "";
         this.dom.style.height =
-          this.#minimizedHeight != null ? `${this.#minimizedHeight}px` : "";
+          this.#minimizedHeight != null
+            ? `${this.#minimizedHeight}px`
+            : this.#defaultHeight != null
+              ? `${this.#defaultHeight}px`
+              : "";
         this.moveWindowTo({
           left: this.#minimizedLeft,
           top: this.#minimizedTop,
@@ -370,6 +384,8 @@ export const Window = defineElement(
     updateAttributes(attrs: WindowAttributes) {
       const unpadded = attrs.unpadded ?? false;
       const stale = attrs.stale ?? false;
+      this.#defaultWidth = attrs.width ?? undefined;
+      this.#defaultHeight = attrs.height ?? undefined;
       this.#titleNode.textContent = attrs.title ?? DEFAULT_WINDOW_TITLE;
       this.domSlot.className = clsx(
         "flex flex-col gap-1 w-full h-full",
@@ -378,6 +394,9 @@ export const Window = defineElement(
       this.#staleOverlay.classList.add(clsx("transition-opacity"));
       this.#staleOverlay.style.opacity = stale ? "40%" : "0";
       this.#staleOverlay.style.pointerEvents = stale ? "" : "none";
+
+      // Update the window size based on the new defaults
+      this.#setMaximized(this.#isMaximized);
     }
   },
 );
