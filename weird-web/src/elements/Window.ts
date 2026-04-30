@@ -83,39 +83,43 @@ export const Window = defineElement(
             height: attrs.height != null ? `${attrs.height}px` : "",
           },
         },
-        (windowTitlebar = h(
+        h(
           "div",
-          {
-            className: clsx(
-              "flex-none border-b-2 border-black touch-none select-none dark:border-zinc-300",
-            ),
-          },
-          h(
+          { className: clsx("overflow-hidden w-full h-full flex flex-col") },
+          (windowTitlebar = h(
             "div",
             {
-              className: clsx("flex-1 flex items-center"),
+              className: clsx(
+                "flex-none overflow-hidden border-b-2 border-black touch-none select-none dark:border-zinc-300",
+              ),
             },
             h(
               "div",
-              { className: clsx("flex-1 px-1 text-nowrap") },
-              (this.#titleNode = document.createTextNode("")),
+              {
+                className: clsx("flex-1 flex items-center"),
+              },
+              h(
+                "div",
+                { className: clsx("flex-1 px-1 text-nowrap overflow-hidden") },
+                (this.#titleNode = document.createTextNode("")),
+              ),
+              (this.#maximizeButton = titlebarButtonComponent(
+                {},
+                (this.#maximizeButtonTextNode = document.createTextNode("^")),
+              )),
+              (this.#closeButton = titlebarButtonComponent({}, "X")),
             ),
-            (this.#maximizeButton = titlebarButtonComponent(
-              {},
-              (this.#maximizeButtonTextNode = document.createTextNode("^")),
-            )),
-            (this.#closeButton = titlebarButtonComponent({}, "X")),
+          )),
+          h(
+            "div",
+            { className: clsx("relative flex-1 w-full overflow-auto") },
+            (this.#staleOverlay = h("div", {
+              className: clsx("absolute inset-0 bg-black dark:bg-white"),
+            })),
+            (this.domSlot = h("div", {
+              className: clsx("w-full h-full"),
+            })),
           ),
-        )),
-        h(
-          "div",
-          { className: clsx("relative w-full h-full overflow-auto") },
-          (this.#staleOverlay = h("div", {
-            className: clsx("absolute inset-0 bg-black dark:bg-white"),
-          })),
-          (this.domSlot = h("div", {
-            className: clsx("w-full h-full"),
-          })),
         ),
         (resizeHandles.N = h("div", {
           className: clsx("w-full -my-4 h-4 absolute top-0 cursor-n-resize"),
@@ -411,7 +415,7 @@ function titlebarButtonComponent(
     {
       ...attrs,
       className: clsx(
-        "text-xs font-semibold w-6 h-6 m-0.5 bg-white border-2 border-black shadow-xs hover:shadow-xs/25 hover:bg-zinc-200 focus-visible:bg-zinc-200 active:bg-zinc-300 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:hover:bg-zinc-700 dark:focus-visible:bg-zinc-700 dark:active:bg-zinc-600",
+        "flex-0 text-xs font-semibold w-6 h-6 min-w-6 m-0.5 bg-white border-2 border-black shadow-xs hover:shadow-xs/25 hover:bg-zinc-200 focus-visible:bg-zinc-200 active:bg-zinc-300 focus-visible:outline-2 focus-visible:outline-blue-400 dark:text-white dark:bg-zinc-800 dark:border-zinc-300 dark:hover:bg-zinc-700 dark:focus-visible:bg-zinc-700 dark:active:bg-zinc-600",
         attrs.className,
       ),
     },
