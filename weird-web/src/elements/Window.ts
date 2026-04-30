@@ -221,6 +221,10 @@ export const Window = defineElement(
                 break;
             }
 
+            // Clamp to minimum size
+            this.#minimizedWidth = Math.max(this.#minimizedWidth, 80);
+            this.#minimizedHeight = Math.max(this.#minimizedHeight, 40);
+
             this.dom.style.width = `${this.#minimizedWidth}px`;
             this.dom.style.height = `${this.#minimizedHeight}px`;
             if (windowX != null || windowY != null) {
