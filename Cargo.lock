@@ -209,7 +209,6 @@ name = "example-graphviz"
 version = "0.1.0"
 dependencies = [
  "weird-client",
- "weird-core",
 ]
 
 [[package]]
@@ -313,7 +312,6 @@ name = "hello-world"
 version = "0.1.0"
 dependencies = [
  "weird-client",
- "weird-core",
 ]
 
 [[package]]

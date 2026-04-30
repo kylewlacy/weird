@@ -1,5 +1,4 @@
-use weird_client::WeirdClient;
-use weird_core::world::Node;
+use weird_client::{WeirdClient, world::Node};
 
 fn main() {
     let weird = WeirdClient::builder()

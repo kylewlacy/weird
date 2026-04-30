@@ -11,6 +11,9 @@ use weird_core::{
     world::{InitRequest, InitResponse},
 };
 
+// Re-export weird-core
+pub use weird_core::*;
+
 type RpcRequest = JsonRpcRequest<weird_core::proto::Request>;
 type RpcResponse = JsonRpcResponse<weird_core::proto::Response>;
 

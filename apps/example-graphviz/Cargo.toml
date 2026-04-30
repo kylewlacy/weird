@@ -5,4 +5,3 @@ edition = "2024"
 
 [dependencies]
 weird-client = { path = "../../crates/weird-client" }
-weird-core = { path = "../../crates/weird-core" }

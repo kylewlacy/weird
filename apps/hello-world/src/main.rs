@@ -1,5 +1,4 @@
-use weird_client::WeirdClient;
-use weird_core::world::Node;
+use weird_client::{WeirdClient, world::Node};
 
 const DELAY: std::time::Duration = std::time::Duration::from_millis(500);
 
