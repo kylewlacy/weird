@@ -25,8 +25,11 @@ fn main() {
                 .id("name")
                 .attr("value", &name)
                 .attr("placeholder", "Your name"),
-            Node::element("Button").id("run").child(Node::text("Run")),
-            Node::element("Button").id("exit").child(Node::text("Exit")),
+            Node::element("Flex"),
+            Node::element("Row").children([
+                Node::element("Button").id("run").child(Node::text("Run")),
+                Node::element("Button").id("exit").child(Node::text("Exit")),
+            ]),
         ]);
 
         let Some(event) = weird.next_event().unwrap() else {
