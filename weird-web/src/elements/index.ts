@@ -8,15 +8,21 @@ import { Input } from "./Input.ts";
 import { Graphviz } from "./Graphviz.ts";
 import { Select } from "./Select.ts";
 import { Checkbox } from "./Checkbox.ts";
+import { Col } from "./Col.ts";
+import { Row } from "./Row.ts";
+import { Flex } from "./Flex.ts";
 
 export type { WeirdElement, WeirdElementClass };
 
 export const ELEMENTS = {
   Button,
   Checkbox,
+  Col,
+  Flex,
   Graphviz,
   Input,
   ProgressBar,
+  Row,
   Select,
   UnknownElement,
   Window,
